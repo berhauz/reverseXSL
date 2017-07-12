@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+	elementFormDefault="qualified" targetNamespace="http://www.reverseXSL.com/Parser/Exceptions"
+	xmlns:ex="http://www.reverseXSL.com/Parser/Exceptions">
+	<xs:element name="ParserExceptionList">
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element name="Remark" type="xs:string" />
+				<xs:element name="Exception" maxOccurs="unbounded"	minOccurs="0">
+					<xs:complexType>
+						<xs:sequence>
+							<xs:element name="Error">
+								<xs:complexType>
+									<xs:simpleContent>
+										<xs:extension base="xs:string">
+											<xs:attribute name="class" use="optional" type="xs:NCName" />
+										</xs:extension>
+									</xs:simpleContent>
+								</xs:complexType>
+							</xs:element>
+							<xs:element name="CausedBy" minOccurs="0">
+								<xs:complexType>
+									<xs:simpleContent>
+										<xs:extension base="xs:string">
+											<xs:attribute name="class" use="optional" type="xs:NCName" />
+										</xs:extension>
+									</xs:simpleContent>
+								</xs:complexType>
+							</xs:element>
+						</xs:sequence>
+						<xs:attribute name="impact" use="required">
+							<xs:simpleType>
+								<xs:restriction base="xs:string">
+									<xs:enumeration value="Warning"></xs:enumeration>
+									<xs:enumeration value="FATAL"></xs:enumeration>
+								</xs:restriction>
+							</xs:simpleType>
+						</xs:attribute>
+						<xs:attribute name="sequence" use="optional" type="xs:integer" />
+					</xs:complexType>
+				</xs:element>
+			</xs:sequence>
+			<xs:attribute name="exceptionsCount" use="required"
+				type="xs:integer" />
+			<xs:attribute name="relatingToMessageID" use="optional"
+				type="xs:string" />
+		</xs:complexType>
+	</xs:element>
+</xs:schema>

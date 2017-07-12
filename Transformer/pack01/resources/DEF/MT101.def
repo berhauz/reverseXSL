@@ -1,0 +1,456 @@
+ SWIFT MT 101 Request For Transfer
+ S.W.I.F.T. User Handbook 2007
+ (prepared by Bernard H. Dec 2008)
+
+  *********************************************************************
+  ** FOREWORD: This sample is a full-fledged message transformation  **
+  ** reflecting true real-world intricacies. Our objective is to     **
+  ** illustrate precisely what this reverseXSL parser is capable of, **
+  ** and how few(!) real-code it does take to handle a true message. **
+  ** The MT101 is well-known financial message whose format is also  **
+  ** used by corporate clients of some banks to request payments.    **
+  ** For simplified - tutorial-grade - samples, please look to the   **
+  ** web site: www.ReverseXSL.com                                    **
+  **                                                                 **
+  **  IMPORTANT: understanding Regular Expressions is a MUST before  **
+  **  looking any further; your guessing attempts will be defeated!  **
+  **  A one hour tutorial is available at the web site.              **
+  *********************************************************************
+
+  (every line not starting in column 1 is a comment or annotation ignored by the Parser)
+
+  (best displayed with fixed-spacing font)
+
+  Next lines support integrated testing facilities (within StylusStudio)
+  #ONE=MT101_01.txt;
+  #TWO=MT101_02.txt;
+  
+  REVISIONS:
+    - This version and associated samples have been developed
+      to illustrate the parsing of SWIFT messages and are bound
+      to the terms of use published at www.reversexsl.com
+
+  DESIGN NOTES:
+     * This sample definition parses a complete SWIFT message
+       featuring Blocks 1 to 4 inclusive, and optionally block 5. 
+     * Some banks handle domestic and international payments embeded in their own
+       variant headers and trailers leaving possible differences in message composition.
+     * THIS TRANSFORMATION IS BEST RUN WITH MaxFatalExceptions=0 & MaxTotalExceptions=10
+     * As far as code lists are concerned, we do not check them all but where the 
+       meaning of other data elements is affected by code values
+     * All data element dependency conditions are verified and yield a warning
+     * This version generated an 'SML' (Simple xML), i.e. no element attributes are used, only plain elements
+     * We try keeping one word XML data element names whenever the meaning can be
+       expressed by element hierarchies. For instance: 
+                   <MT101>...
+                      <Text>...
+                        <Transaction>...
+                            <Instruction>...
+                                <Code>ABCD</Code>
+
+
+ ---------- CONDITIONS ---------------------
+COND AppIDCode     "[FAL]"                     DEPTH 1 R W "swBH-f1 Basic Header - Application ID! must be one of F A or L"
+COND INpriority    "[S.|U1|U3|N1|N2|N3|N ]"    DEPTH 1 R W "swAH Application Header - Input - Priority and Delivery Monitoring! must be one of S* U1 U3 N1 N2 N3 N<blank>"
+COND OUTpriority   "[SUN]"                     DEPTH 1 R W "swAHO-f7 Application Header - Output - Priority! must be one of S U or N"
+
+
+ ---------- MESSAGE DEFINITION -------------
+    *** CUT out the 5 blocks; a simple CUT formula based on '{' delimiters will interfere with sub-blocks! 
+    *** tips: this first CUT must use DOTALL(flag 's') mode; the capturing of blocks 3 & 5 is embedded in OPTIONAL non-capturing groups (i.e. pattern framed as in "(?:pattern)?" )
+MSG     ""         MT101                    M 1 1 ACC 1     R F "swMT000 Standard 5-block SWIFT Message structure" CUT "(?s)^\{(1:.*?)\}\{(2:.*?)\}(?:\{(3:.*?)\})?\{(4:.*?)\}(?:\{(5:.*)\})?.?.?$"
+
+ ======= {1: Basic Header Block} =======
+ *** tip: although every block has a fixed structure, we release the fixed size constraint on the last field at CUT time and check length at data validation time
+|SEG    "^1:"        BasicHeader            M 1 1 ACC 1     R F "swBH Basic Header" CUT "^1:(.)(..)(.{12})(.{4})(.*)$"
+||D     "(.*)"         AppID                C 1 1 ACC 1     COND AppIDCode "(.*)" "swBH-f1 Basic Header - Application ID" ASMATCHED
+||D     "(.*)"         ServiceID            M 1 1 ACC 1     R W "swBH-f2 Basic Header - Service ID" DIGIT
+||D     "(.*)"         LogicalTerminal      M 1 1 ACC 1     R F "swBH-f3 Basic Header - Logicial Terminal ID (sender for INput, receiver for OUTput)" UPALPHANUM
+||D     "(.*)"         SessionNb            M 1 1 ACC 1     R W "swBH-f4 Basic Header - Session Number zero-padded" DIGIT
+||D     "(.*)"         SeqNb                M 1 1 ACC 1     R W "swBH-f5 Basic Header - Sequence Number zero-padded" DIGIT [6..6]
+
+ ======= {2: Application Header Block} =======
+     *** tip: the message cut guarantees that we always have a single block 2, hence Input/output mutual exclusion does not need double-check
+|SEG    "^2:I"       InputHeader            O 0 1 ACC 1     R F "swAHI Application Header - INput" CUT "^2:I(...)(.{12})(.)(.)?(.*)?$"
+||D     "(101)"        MessageType          M 1 1 ACC 1     R F "swAHI-f2 Application Header - Input - Message Type (101 expected here)" ASMATCHED
+    *** formally there shall be a X at pos 9 in next field, but we do not need to check this here (a CONDition would do)
+||D     "(.*)"         LogicalTerminal      M 1 1 ACC 1     R F "swAHI-f3 Application Header - Input - Logicial Terminal ID (receiver)" UPALPHANUM
+||D     "(.*)"         PriorityCode         C 1 1 ACC 1     COND INpriority "(.*)" "swAHI-f4 Application Header - Input - Priority" ASMATCHED
+    *** let us illustrate the use of MARKs... here we interpret priority codes (up to this point) and generate one single XML element with the outcome
+||MARK                 Priority             COND INpriority "S" "SYSTEM" "NULL"
+||MARK                 Priority             COND INpriority "U" "URGENT" "NULL"
+||MARK                 Priority             COND INpriority "N" "NORMAL" "NULL"
+    *** tip: we extend the CONDition on priority with the delivery monitoring code; the CONDition is evaluated when parsing terminates
+||D     "(.*)"         Monitoring           C 0 1 ACC 1     COND INpriority "(.*)" "swAHI-f5 Application Header - Input - Delivery Monitoring" ASMATCHED
+||D     "(.*)"         Obsolescence         O 0 1 ACC 1     R W "swAHI-f6 Application Header - Input - Obsolescence Period" DIGIT [3..3]
+
+|SEG    "^2:O"       OutputHeader           O 0 1 ACC 1     R F "swAHO Application Header - Output" CUT "^2:O(...)(....)(.{28})(.{6})(....)(.*)$"
+||D     "(101)"        MessageType          M 1 1 ACC 1     R F "swAHO-f2 Application Header - Output - Message Type (101 expected here)" ASMATCHED
+    *** we do not validate data time formats in details, as these are rather informative
+||D     "(.*)"         InputStamp           M 1 1 ACC 1     R W "swAHO-f3 Application Header - Output - Input Time" DIGIT
+||SEG   ""             MIR                  M 1 1 ACC 1     R W "swAHO-f4 Application Header - Output - Message Input Reference (MIR)" CUT "^(.{6})(.{12})(.{4})(.*)$"
+|||D    "(.*)"           Date               M 1 1 ACC 1     R W "swAHO-f4a Application Header - Output - MIR - Sender Date" DIGIT
+|||D    "(.*)"           LogicalTerminal    M 1 1 ACC 1     R F "swAHO-f4b Application Header - Output - MIR - Logicial Terminal ID (or pseudo)" UPALPHANUM
+|||D    "(.*)"           SessionNb          M 1 1 ACC 1     R W "swAHO-f4c Application Header - Output - MIR - Session Number zero-padded" DIGIT
+|||D    "(.*)"           SeqNb              M 1 1 ACC 1     R W "swAHO-f4d Application Header - Output - MIR - Sequence Number zero-padded" DIGIT [6..6]
+||D     "(.*)"         DateDelivered        M 1 1 ACC 1     R W "swAHO-f5 Application Header - Output - Date Delivered to receiver" DIGIT
+||D     "(.*)"         TimeDelivered        M 1 1 ACC 1     R W "swAHO-f6 Application Header - Output - Time Delivered to receiver" DIGIT
+    *** do not forget that priority code is optional in GPA messages
+||D     "(.*)"         PriorityCode         C 0 1 ACC 1     COND OUTpriority "(.*)" "swAHO-f7 Application Header - Output - Priority" ASMATCHED
+    *** using MARKs, we interpret priority codes again and generate one single XML element with the outcome
+||MARK                 Priority             COND OUTpriority "S" "SYSTEM" "NULL"
+||MARK                 Priority             COND OUTpriority "U" "URGENT" "NULL"
+||MARK                 Priority             COND OUTpriority "N" "NORMAL" "NULL"
+
+ ======= {3: User Header Block} OPTIONAL =======
+     *** Here we cut on a repeating sub block "{.*}" pattern using DOTALL mode (flag 's'), with reluctant capture till very next '}'
+|SEG    "^3:"        UserHeader             O 0 1 ACC 1     R F "swUH User Header" CUT "(?s)\{(.*?)\}"
+||SEG   ""             Property             M 1 99 ACC 99   R W "swUH-SB User Header Sub Block" CUT "(?s)(^.*?):(.*)"    
+|||D    "(.*)"         Tag                  M 1 1 ACC 1     R W "swUH-SB-T User Header Sub Block - Tag code" DIGIT [3..3]
+    *** tip: we accept multiline values in the next data element thanks to the DotAll (s flag)
+|||D    "(?s)(.*)"     Value                O 1 1 ACC 1     R W "swUH-SB-V User Header Sub Block - Value" ASMATCHED
+
+
+ ======= {4: Text Block or body} =======
+    *** within block 4 we cut first on line boundaries (other approaches based on sub-blocks are actually needed for other MT message brands)
+|SEG    "^4:"        Text                   M 1 1 ACC 1     R F "swTB Text Block" CUT-ON-NL
+||D     "(4:)"         SKIP                 M 1 1 ACC 1     R F "swTB4 Text Block 4 Tag" ASMATCHED
+
+ ++++++++ Mandatory Sequence A Common Elements ++++++++++
+
+     *** here we accept block 4 to start with sender/recip BEIs and a repetition of the message type (fixed 3 lines in this case)
+    *** tip: next regex matches every line not starting with either ':' or '-' or '}' using a zero-width negative lookahead expression
+||GRP   "^(?![:\-\}])" Preamble             O 0 1 ACC 1     R W "swCE-P Text Block 4 Preamble"
+|||D    "^(?![:\-\}])(.*)$"  SenderBEI      M 1 1 ACC 1     R W "swCE-P1 Text Block 4 Preamble - sender BEI" ALPHANUM [1..11]
+|||D    "^(?![:\-\}])(.*)$"  RecipientBEI   M 1 1 ACC 1     R W "swCE-P2 Text Block 4 Preamble - recipient BEI" ALPHANUM [1..11]
+|||D    "(\d*)"              MT             M 1 1 ACC 1     R W "swCE-P3 Text Block 4 Preamble - Message Type" DIGIT [3..3]
+
+||D     "^:20:(.*)"    SenderRef            M 1 1 ACC 1     R W "swCE-20 Sender's Reference" ASCII [1..16]
+||D     "^:21R:(.*)"   CustomerRef          O 0 1 ACC 1     R W "swCE-21R Customer Specified Reference" ASCII [1..16]
+||SEG   "^:28D:"       Message              M 1 1 ACC 1     R W "swCE-28D Message Index/Total" CUT "^:28D:(.*?)/(.*)$"
+|||D    "(.*)"           Index              M 1 1 ACC 1     R W "swCE-28D Message Index" DIGIT [1..5]
+|||D    "(.*)"           Total              M 1 1 ACC 1     R W "swCE-28D Message Total" DIGIT [1..5]
+
+    *** the next group clarifies the semantical structure and aligns it with the next similar group
+||GRP   "^:50[CL]"     InstructingParty     O 0 1 ACC 1     R W "swCE-50CL Instructing Party"
+    --- option C
+|||D    "^:50C:(.*)"     BEI                O 0 1 ACC 1     R W "swCE-50C Instructing Party - BEI code" ALPHANUM [1..11]
+    --- option L
+|||D    "^:50L:(.*)"     Identifier         O 0 1 ACC 1     R W "swCE-50L Instructing Party - Identifier" ASCII [1..35]
+
+    *** the next group effectively groups multiple lines under the same party identification element
+||GRP   "^:50[GHF]:"   OrderingCustomer     O 0 1 ACC 1     R W "swCE-50GHF Ordering Customer"
+    --- option G
+|||GRP  "^:50G:"         NOTAG              O 0 1 ACC 1     R W "swCE-50G Ordering Customer - option G"
+||||D   "^:50G:/(.*)"      Account          M 1 1 ACC 1     R W "swCE-50G1 Ordering Customer - Account" ASCII [1..34]
+||||D   "(.*)"             BEI              M 1 1 ACC 1     R W "swCE-50G2 Ordering Customer - BEI code" ALPHANUM [1..11]
+    --- option H
+|||GRP  "^:50H:"         NOTAG              O 0 1 ACC 1     R W "swCE-50H Ordering Customer - option H"
+||||D   "^:50H:/(.*)"       Account         M 1 1 ACC 1     R W "swCE-50H1 Ordering Customer - Account" ASCII [1..34]
+    *** tip: next element takes every line not starting with either ':' or '-' or '}' using a zero-width negative lookahead expression
+||||D   "^(?![:\-\}])(.*)$" NameAndAddress  M 1 4 ACC 9     R W "swCE-50H2 Ordering Customer - Name and Address Line" ASCII [1..35]
+    --- option F (simplified: we do not check codes)
+|||GRP  "^:50F:"         NOTAG              O 0 1 ACC 1     R W "swCE-50F Ordering Customer - option H"
+||||D   "^:50F:(.*)"        Identifier      M 1 1 ACC 1     R W "swCE-50F1 Ordering Customer - Identifier" ASCII [1..35]
+||||D   "^(?![:\-\}])(.*)$" NameAndAddress  M 1 4 ACC 9     R W "swCE-50F2 Ordering Customer - Name and Address Line" ASCII [1..35]
+
+||GRP   "^:52[AC]:"    ServicingInstitution O 0 1 ACC 1     R W "swCE-52AC Account Servicing Institution"
+    --- option A         *** tip: a group is used for 2 lines
+|||GRP  "^:52A:"         NOTAG              O 0 1 ACC 1     R W "swCE-52A Account Servicing Institution - option A"
+||||D   "^:52A:/(.*)$"     Identifier       O 0 1 ACC 1     R W "swCE-52A1 Account Servicing Institution - Identifier" ASCII [1..36]
+    *** the above element being optional, the BIC code lays on the :52A: line or on a line of its own not starting with either ':' or '-' or '}'
+||||D   "^:52A:(.*)$|^(?![:\-\}])(.*)$" BIC M 1 1 ACC 1     R W "swCE-52A2 Account Servicing Institution - BIC code" ALPHANUM [1..11]
+    --- option C         *** tip: a simple element suffices for a single line
+|||D    "^:52C:/(.*)"    Identifier         O 0 1 ACC 1     R W "swCE-52C Account Servicing Institution - Identifier" ASCII [1..35]
+
+||GRP   "^:51A:"       SendingInstitution   O 0 1 ACC 1     R W "swCE-51A Sending Institution (IFT only)"
+|||D    "^:51A:/(.*)$"   Identifier         O 0 1 ACC 1     R W "swCE-51A1 Sending Institution - Identifier" ASCII [1..36]
+    *** the above element being optional, the BIC code lays on the :51A: line or on a line of its own not starting with either ':' or '-' or '}'
+|||D    "^:51A:(.*)$|^(?![:\-\}])(.*)$" BIC M 1 1 ACC 1     R W "swCE-51A2 Sending Institution - BIC code" ALPHANUM [1..11]
+
+||D     "^:30:(.*)"    RequestedExecDate    M 1 1 ACC 1     R F "swCE-30 Requested Execution Date" DIGIT [6..6]
+
+||D     "^:25:(.*)"    Authorization        O 0 1 ACC 1     R W "swCE-25 Authorisation" ASCII [1..35]
+
+ ++++++++ End of Mandatory Sequence A Common Elements ++++++++++
+
+ @@@@@@@@ Repetitive Mandatory Sequence B Transaction Details @@@@@@@@
+
+||GRP   "^:21:"        Transaction          M 1 999 ACC 999 R F "swTD Transaction Details (repeated B sequence)"
+
+|||D    "^:21:(.*)"      Reference          M 1 1 ACC 1     R F "swTD-21 Transaction Reference" ASCII [1..16]
+|||D    "^:21F:(.*)"     FXReference        O 0 1 ACC 1     R F "swTD-21F F/X Deal Reference" ASCII [1..16]
+    *** the Instruction can be repeated
+|||SEG  "^:23E:"         Instruction        O 0 99 ACC 99   R W "swTD-23E Instruction Code" CUT "^:23E:(.*?)(/.*)?$"
+||||D   "(.*)"             Code             M 1 1 ACC 1     R F "swTD-23E1 Instruction Code" UPALPHA [4..4]
+||||D   "/(.*)"            Info             O 0 1 ACC 1     R W "swTD-23E2 Instruction Code Additional Information" ASCII [1..30]
+
+|||SEG  "^:32B:"         NOTAG              M 1 1 ACC 1     R F "swTD-32B Currency / Transaction Amount" CUT "^:32B:(...)(.*)$"
+||||D   "(.*)"             Currency         M 1 1 ACC 1     R F "swTD-32B1 Currency" UPALPHA
+||||D   "(.*)"             Amount           M 1 1 ACC 1     R F "swTD-32B2 Transaction Amount" NUMERIC [1..15]
+
+    *** The following is a near copy of the field group :50a: from Sequence A
+    *** 'near' because the depth is one more, and element references do differ
+|||GRP  "^:50[CL]"       InstructingParty   O 0 1 ACC 1     R W "swTD-50CL Instructing Party"
+    --- option C
+||||D   "^:50C:(.*)"       BEI              O 0 1 ACC 1     R W "swTD-50C Instructing Party - BEI code" ALPHANUM [1..11]
+    --- option L
+||||D   "^:50L:(.*)"       Identifier       O 0 1 ACC 1     R W "swTD-50L Instructing Party - Identifier" ASCII [1..35]
+
+|||GRP  "^:50[GHF]:"     OrderingCustomer   O 0 1 ACC 1     R W "swTD-50GHF Ordering Customer"
+    --- option G
+||||GRP "^:50G:"           NOTAG            O 0 1 ACC 1     R W "swTD-50G Ordering Customer - option G"
+|||||D  "^:50G:/(.*)"        Account        M 1 1 ACC 1     R W "swTD-50G1 Ordering Customer - Account" ASCII [1..34]
+|||||D  "(.*)"               BEI            M 1 1 ACC 1     R W "swTD-50G2 Ordering Customer - BEI code" ALPHANUM [1..11]
+    --- option H
+||||GRP "^:50H:"           NOTAG            O 0 1 ACC 1     R W "swTD-50H Ordering Customer - option H"
+|||||D  "^:50H:/(.*)"        Account        M 1 1 ACC 1     R W "swTD-50H1 Ordering Customer - Account" ASCII [1..34]
+|||||D  "^(?![:\-\}])(.*)$"  NameAndAddress M 1 4 ACC 9     R W "swTD-50H2 Ordering Customer - Name and Address Line" ASCII [1..35]
+    --- option F (simplified: we do not check codes)
+||||GRP "^:50F:"           NOTAG            O 0 1 ACC 1     R W "swTD-50F Ordering Customer - option H"
+|||||D  "^:50F:(.*)"         Identifier     M 1 1 ACC 1     R W "swTD-50F1 Ordering Customer - Identifier" ASCII [1..35]
+|||||D  "^(?![:\-\}])(.*)$"  NameAndAddress M 1 4 ACC 9     R W "swTD-50F2 Ordering Customer - Name and Address Line" ASCII [1..35]
+
+    *** The following is a near copy of the field group :52a: from Sequence A
+    *** 'near' because the depth is one more, and element references do differ
+|||GRP  "^:52[AC]:"      ServicingInstitution O 0 1 ACC 1   R W "swTD-52AC Account Servicing Institution"
+    --- option A         *** tip: a group is used for 2 lines
+||||GRP "^:52A:"           NOTAG            O 0 1 ACC 1     R W "swTD-52A Account Servicing Institution - option A"
+|||||D  "^:52A:/(.*)$"       Identifier     O 0 1 ACC 1     R W "swTD-52A1 Account Servicing Institution - Identifier" ASCII [1..36]
+    *** the above element being optional, the BIC code lays on the :52A: line or on a line of its own not starting with either ':' or '-' or '}'
+|||||D  "^:52A:(.*)$|^(?![:\-\}])(.*)$" BIC M 1 1 ACC 1     R W "swTD-52A2 Account Servicing Institution - BIC code" ALPHANUM [1..11]
+    --- option C         *** tip: a simple element suffices for a single line
+||||D   "^:52C:/(.*)"      Identifier       O 0 1 ACC 1     R W "swTD-52C Account Servicing Institution - option C - Identifier" ASCII [1..34]
+
+|||GRP  "^:56[ACD]:"     Intermediary       O 0 1 ACC 1     R W "swTD-56ACD Intermediary"
+    --- option A         *** tip: a group is used for 2 lines
+||||GRP "^:56A:"           NOTAG            O 0 1 ACC 1     R W "swTD-56A Intermediary - option A"
+|||||D  "^:56A:/(.*)$"       Identifier     O 0 1 ACC 1     R W "swTD-56A1 Intermediary - Identifier" ASCII [1..36]
+    *** the above element being optional, the BIC code lays on the :56A: line or on a line of its own not starting with either ':' or '-' or '}'
+|||||D  "^:56A:(.*)$|^(?![:\-\}])(.*)$" BIC M 1 1 ACC 1     R W "swTD-56A2 Intermediary - BIC code" ALPHANUM [1..11]
+    --- option C         *** tip: a simple element suffices for a single line
+||||D   "^:56C:/(.*)"      Identifier       O 0 1 ACC 1     R W "swTD-56C Intermediary - option C - Identifier" ASCII [1..34]
+    --- option D
+||||GRP "^:56D:"           NOTAG            O 0 1 ACC 1     R W "swTD-56D Intermediary - option D"
+|||||D  "^:56D:/(.*)"        Identifier     O 0 1 ACC 1     R W "swTD-56D1 Intermediary - Identifier" ASCII [1..36]
+|||||D  "^:56D:(.*)$"        NameAndAddress O 0 1 ACC 1     R W "swTD-56D2 Intermediary - Name and Address Line" ASCII [1..35]
+|||||D  "^(?![:\-\}])(.*)$"  NameAndAddress M 1 4 ACC 9     R W "swTD-56D2R Intermediary - Repeated Name and Address Line" ASCII [1..35]
+
+|||GRP  "^:57[ACD]:"     AccountWithInstitution O 0 1 ACC 1 R W "swTD-57ACD Account With Institution"
+    --- option A         *** tip: a group is used for 2 lines
+||||GRP "^:57A:"           NOTAG            O 0 1 ACC 1     R W "swTD-57A Account With Institution - option A"
+|||||D  "^:57A:/(.*)$"       Identifier     O 0 1 ACC 1     R W "swTD-57A1 Account With Institution - Identifier" ASCII [1..36]
+    *** the above element being optional, the BIC code lays on the :57A: line or on a line of its own not starting with either ':' or '-' or '}'
+|||||D  "^:57A:(.*)$|^(?![:\-\}])(.*)$" BIC M 1 1 ACC 1     R W "swTD-57A2 Account With Institution - BIC code" ALPHANUM [1..11]
+    --- option C         *** tip: a simple element suffices for a single line
+||||D   "^:57C:/(.*)"      Identifier       O 0 1 ACC 1     R W "swTD-57C Account With Institution - option C - Identifier" ASCII [1..34]
+    --- option D
+||||GRP "^:57D:"           NOTAG            O 0 1 ACC 1     R W "swTD-57D Account With Institution - option D"
+|||||D  "^:57D:/(.*)"        Identifier     O 0 1 ACC 1     R W "swTD-57D1 Account With Institution - Identifier" ASCII [1..36]
+|||||D  "^:57D:(.*)$"        NameAndAddress O 0 1 ACC 1     R W "swTD-57D2 Account With Institution - Name and Address Line" ASCII [1..35]
+|||||D  "^(?![:\-\}])(.*)$"  NameAndAddress M 1 4 ACC 9     R W "swTD-57D2R Account With Institution - Repeated Name and Address Line" ASCII [1..35]
+
+|||GRP  "^:59A?:"        Beneficiary        M 1 1 ACC 1     R W "swTD-59A_ Beneficiary"
+    --- option A         *** tip: a group is used for 2 lines
+||||GRP "^:59A:"           NOTAG            O 0 1 ACC 1     R W "swTD-59A Beneficiary - option A"
+|||||D  "^:59A:/(.*)$"       Account        O 0 1 ACC 1     R W "swTD-59A1 Beneficiary - Account" ASCII [1..34]
+    *** the above element being optional, the BEI code lays on the :59A: line or on a line of its own not starting with either ':' or '-' or '}'
+|||||D  "^:59A:(.*)$|^(?![:\-\}])(.*)$" BEI M 1 1 ACC 1     R W "swTD-59A2 Beneficiary - BEI code" ALPHANUM [1..11]
+    --- option _
+||||GRP "^:59:"            NOTAG            O 0 1 ACC 1     R W "swTD-59_ Beneficiary - option _"
+|||||D  "^:59:/(.*)"         Identifier     O 0 1 ACC 1     R W "swTD-59_1 Beneficiary - Identifier" ASCII [1..34]
+|||||D  "^:59:(.*)$"         NameAndAddress O 0 1 ACC 1     R W "swTD-59_2 Beneficiary - Name and Address Line" ASCII [1..35]
+|||||D  "^(?![:\-\}])(.*)$"  NameAndAddress M 1 4 ACC 9     R W "swTD-59_2R Beneficiary - Repeated Name and Address Line" ASCII [1..35]
+
+|||GRP  "^:70:"          RemittanceInfo     O 0 1 ACC 1     R W "swTD-70_ Remittance Information"
+||||D   "^:70:(.*)$"        Details         M 1 1 ACC 1     R W "swTD-70_1 Remittance Information - Payment Details" ASCII [1..35]
+||||D   "^(?![:\-\}])(.*)$" Details         O 0 3 ACC 9     R W "swTD-70_R Remittance Information - Repeated Payment Details" ASCII [1..35]
+
+|||GRP  "^:77B:"         RegulatoryReporting O 0 1 ACC 1    R W "swTD-77B Regulatory Reporting"
+||||D   "^:77B:(.*)$"       Details         M 1 1 ACC 1     R W "swTD-77B1 Regulatory Reporting - Narrative" ASCII [1..35]
+||||D   "^(?![:\-\}])(.*)$" Details         O 0 2 ACC 9     R W "swTD-77BR Regulatory Reporting - Repeated Narrative" ASCII [1..35]
+
+|||SEG  "^:33B:"         Original           O 0 1 ACC 1     R W "swTD-33B Currency / Original Ordered Amount" CUT "^:33B:(...)(.*)$"
+||||D   "(.*)"             Currency         M 1 1 ACC 1     R W "swTD-33B1 Original Currency" UPALPHA
+||||D   "(.*)"             Amount           M 1 1 ACC 1     R W "swTD-33B2 Original Ordered Amount" NUMERIC [1..15]
+
+|||D    "^:71A:(.*)"     ChargeCode         M 1 1 ACC 1     R W "swTD-71A Details of Charges" UPALPHA [3..3]
+
+|||D    "^:25A:/(.*)"    ChargesAccount     O 0 1 ACC 1     R W "swTD-25A Charges Account" ASCII [1..34]
+
+|||D    "^:36:(.*)"      ExchangeRate       O 0 1 ACC 1     R W "swTD-36 Exchange Rate" NUMERIC [1..12]
+
+ @@@@@@@@ End of Mandatory Sequence B Transaction Details @@@@@@@@
+
+||D     "(-)"            SKIP               M 1 1 ACC 1     R F "swTB- Text Block 4 Trailer tag" ASMATCHED
+
+ ======= {5: Trailer Block} OPTIONAL =======
+     *** Just like Block 3, we cut on a repeating sub block "{.*}" pattern using Multiline and DotAll modes, with reluctant capture till very next '}'
+|SEG    "^5:"        Trailer                O 0 1 ACC 1     R F "swTR Message Trailer" CUT "(?sm)\{(.*?)\}"
+||SEG   ""             Property             M 1 99 ACC 99   R W "swTR-SB Trailer Sub Block" CUT "(?s)(^.*?):(.*)"    
+|||D    "(.*)"           Tag                M 1 1 ACC 1     R W "swTR-SB-T Trailer Sub Block - Tag code" UPALPHA [3..3]
+    *** tip: we accept multiline values in the next data element thanks to the DotAll (s) flag 
+|||D    "(?s)(.*)"       Value              O 1 1 ACC 1     R W "swTR-SB-V Trailer Sub Block - Value" ASMATCHED
+
+END
+
+************** ************** ************** ************** ************** **************
+Next to the very END of the definition, everyting is ignored by the Parser.
+So this is the right place for additional documentation.
+************** ************** ************** ************** ************** **************
+
+This is the documentation generated by the Paser, using
+'java -cp "ReverseXSL.jar;." com.reverseXSL.Parse MT101.def'
+
+<?xml version="1.0" encoding="UTF-8"?>
+<MT101 xmlns="http://www.HelloWorld.com" messageID="sample2009-4-30">
+   <BasicHeader>
+      <AppID>{1..1} swBH-f1 Basic Header - Application ID</AppID>
+      <ServiceID>{1..1} swBH-f2 Basic Header - Service ID</ServiceID>
+      <LogicalTerminal>{1..1} swBH-f3 Basic Header - Logicial Terminal ID (sender for INput, receiver for OUTput)</LogicalTerminal>
+      <SessionNb>{1..1} swBH-f4 Basic Header - Session Number zero-padded</SessionNb>
+      <SeqNb>{1..1} swBH-f5 Basic Header - Sequence Number zero-padded</SeqNb>
+   </BasicHeader>
+   <InputHeader>
+      <MessageType>{1..1} swAHI-f2 Application Header - Input - Message Type (101 expected here)</MessageType>
+      <LogicalTerminal>{1..1} swAHI-f3 Application Header - Input - Logicial Terminal ID (receiver)</LogicalTerminal>
+      <PriorityCode>{1..1} swAHI-f4 Application Header - Input - Priority</PriorityCode>
+      <Priority>INpriority.matches(S)? SYSTEM : NULL</Priority>
+      <Priority>INpriority.matches(U)? URGENT : NULL</Priority>
+      <Priority>INpriority.matches(N)? NORMAL : NULL</Priority>
+      <Monitoring>{0..1} swAHI-f5 Application Header - Input - Delivery Monitoring</Monitoring>
+      <Obsolescence>{0..1} swAHI-f6 Application Header - Input - Obsolescence Period</Obsolescence>
+   </InputHeader>
+   <OutputHeader>
+      <MessageType>{1..1} swAHO-f2 Application Header - Output - Message Type (101 expected here)</MessageType>
+      <InputStamp>{1..1} swAHO-f3 Application Header - Output - Input Time</InputStamp>
+      <MIR>
+         <Date>{1..1} swAHO-f4a Application Header - Output - MIR - Sender Date</Date>
+         <LogicalTerminal>{1..1} swAHO-f4b Application Header - Output - MIR - Logicial Terminal ID (or pseudo)</LogicalTerminal>
+         <SessionNb>{1..1} swAHO-f4c Application Header - Output - MIR - Session Number zero-padded</SessionNb>
+         <SeqNb>{1..1} swAHO-f4d Application Header - Output - MIR - Sequence Number zero-padded</SeqNb>
+      </MIR>
+      <DateDelivered>{1..1} swAHO-f5 Application Header - Output - Date Delivered to receiver</DateDelivered>
+      <TimeDelivered>{1..1} swAHO-f6 Application Header - Output - Time Delivered to receiver</TimeDelivered>
+      <PriorityCode>{0..1} swAHO-f7 Application Header - Output - Priority</PriorityCode>
+      <Priority>OUTpriority.matches(S)? SYSTEM : NULL</Priority>
+      <Priority>OUTpriority.matches(U)? URGENT : NULL</Priority>
+      <Priority>OUTpriority.matches(N)? NORMAL : NULL</Priority>
+   </OutputHeader>
+   <UserHeader>
+      <Property>
+         <Tag>{1..1} swUH-SB-T User Header Sub Block - Tag code</Tag>
+         <Value>{1..1} swUH-SB-V User Header Sub Block - Value</Value>
+      </Property>
+   </UserHeader>
+   <Text>
+      <SKIP>{1..1} swTB4 Text Block 4 Tag</SKIP>
+      <Preamble>
+         <SenderBEI>{1..1} swCE-P1 Text Block 4 Preamble - sender BEI</SenderBEI>
+         <RecipientBEI>{1..1} swCE-P2 Text Block 4 Preamble - recipient BEI</RecipientBEI>
+         <MT>{1..1} swCE-P3 Text Block 4 Preamble - Message Type</MT>
+      </Preamble>
+      <SenderRef>{1..1} swCE-20 Sender's Reference</SenderRef>
+      <CustomerRef>{0..1} swCE-21R Customer Specified Reference</CustomerRef>
+      <Message>
+         <Index>{1..1} swCE-28D Message Index</Index>
+         <Total>{1..1} swCE-28D Message Total</Total>
+      </Message>
+      <InstructingParty>
+         <BEI>{0..1} swCE-50C Instructing Party - BEI code</BEI>
+         <Identifier>{0..1} swCE-50L Instructing Party - Identifier</Identifier>
+      </InstructingParty>
+      <OrderingCustomer>
+         <Account>{1..1} swCE-50G1 Ordering Customer - Account</Account>
+         <BEI>{1..1} swCE-50G2 Ordering Customer - BEI code</BEI>
+         <Account>{1..1} swCE-50H1 Ordering Customer - Account</Account>
+         <NameAndAddress>{1..4} swCE-50H2 Ordering Customer - Name and Address Line</NameAndAddress>
+         <Identifier>{1..1} swCE-50F1 Ordering Customer - Identifier</Identifier>
+         <NameAndAddress>{1..4} swCE-50F2 Ordering Customer - Name and Address Line</NameAndAddress>
+      </OrderingCustomer>
+      <ServicingInstitution>
+         <Identifier>{0..1} swCE-52A1 Account Servicing Institution - Identifier</Identifier>
+         <BIC>{1..1} swCE-52A2 Account Servicing Institution - BIC code</BIC>
+         <Identifier>{0..1} swCE-52C Account Servicing Institution - Identifier</Identifier>
+      </ServicingInstitution>
+      <SendingInstitution>
+         <Identifier>{0..1} swCE-51A1 Sending Institution - Identifier</Identifier>
+         <BIC>{1..1} swCE-51A2 Sending Institution - BIC code</BIC>
+      </SendingInstitution>
+      <RequestedExecDate>{1..1} swCE-30 Requested Execution Date</RequestedExecDate>
+      <Authorization>{0..1} swCE-25 Authorisation</Authorization>
+      <Transaction>
+         <Reference>{1..1} swTD-21 Transaction Reference</Reference>
+         <FXReference>{0..1} swTD-21F F/X Deal Reference</FXReference>
+         <Instruction>
+            <Code>{1..1} swTD-23E1 Instruction Code</Code>
+            <Info>{0..1} swTD-23E2 Instruction Code Additional Information</Info>
+         </Instruction>
+         <Currency>{1..1} swTD-32B1 Currency</Currency>
+         <Amount>{1..1} swTD-32B2 Transaction Amount</Amount>
+         <InstructingParty>
+            <BEI>{0..1} swTD-50C Instructing Party - BEI code</BEI>
+            <Identifier>{0..1} swTD-50L Instructing Party - Identifier</Identifier>
+         </InstructingParty>
+         <OrderingCustomer>
+            <Account>{1..1} swTD-50G1 Ordering Customer - Account</Account>
+            <BEI>{1..1} swTD-50G2 Ordering Customer - BEI code</BEI>
+            <Account>{1..1} swTD-50H1 Ordering Customer - Account</Account>
+            <NameAndAddress>{1..4} swTD-50H2 Ordering Customer - Name and Address Line</NameAndAddress>
+            <Identifier>{1..1} swTD-50F1 Ordering Customer - Identifier</Identifier>
+            <NameAndAddress>{1..4} swTD-50F2 Ordering Customer - Name and Address Line</NameAndAddress>
+         </OrderingCustomer>
+         <ServicingInstitution>
+            <Identifier>{0..1} swTD-52A1 Account Servicing Institution - Identifier</Identifier>
+            <BIC>{1..1} swTD-52A2 Account Servicing Institution - BIC code</BIC>
+            <Identifier>{0..1} swTD-52C Account Servicing Institution - option C - Identifier</Identifier>
+         </ServicingInstitution>
+         <Intermediary>
+            <Identifier>{0..1} swTD-56A1 Intermediary - Identifier</Identifier>
+            <BIC>{1..1} swTD-56A2 Intermediary - BIC code</BIC>
+            <Identifier>{0..1} swTD-56C Intermediary - option C - Identifier</Identifier>
+            <Identifier>{0..1} swTD-56D1 Intermediary - Identifier</Identifier>
+            <NameAndAddress>{0..1} swTD-56D2 Intermediary - Name and Address Line</NameAndAddress>
+            <NameAndAddress>{1..4} swTD-56D2R Intermediary - Repeated Name and Address Line</NameAndAddress>
+         </Intermediary>
+         <AccountWithInstitution>
+            <Identifier>{0..1} swTD-57A1 Account With Institution - Identifier</Identifier>
+            <BIC>{1..1} swTD-57A2 Account With Institution - BIC code</BIC>
+            <Identifier>{0..1} swTD-57C Account With Institution - option C - Identifier</Identifier>
+            <Identifier>{0..1} swTD-57D1 Account With Institution - Identifier</Identifier>
+            <NameAndAddress>{0..1} swTD-57D2 Account With Institution - Name and Address Line</NameAndAddress>
+            <NameAndAddress>{1..4} swTD-57D2R Account With Institution - Repeated Name and Address Line</NameAndAddress>
+         </AccountWithInstitution>
+         <Beneficiary>
+            <Account>{0..1} swTD-59A1 Beneficiary - Account</Account>
+            <BEI>{1..1} swTD-59A2 Beneficiary - BEI code</BEI>
+            <Identifier>{0..1} swTD-59_1 Beneficiary - Identifier</Identifier>
+            <NameAndAddress>{0..1} swTD-59_2 Beneficiary - Name and Address Line</NameAndAddress>
+            <NameAndAddress>{1..4} swTD-59_2R Beneficiary - Repeated Name and Address Line</NameAndAddress>
+         </Beneficiary>
+         <RemittanceInfo>
+            <Details>{1..1} swTD-70_1 Remittance Information - Payment Details</Details>
+            <Details>{0..3} swTD-70_R Remittance Information - Repeated Payment Details</Details>
+         </RemittanceInfo>
+         <RegulatoryReporting>
+            <Details>{1..1} swTD-77B1 Regulatory Reporting - Narrative</Details>
+            <Details>{0..2} swTD-77BR Regulatory Reporting - Repeated Narrative</Details>
+         </RegulatoryReporting>
+         <Original>
+            <Currency>{1..1} swTD-33B1 Original Currency</Currency>
+            <Amount>{1..1} swTD-33B2 Original Ordered Amount</Amount>
+         </Original>
+         <ChargeCode>{1..1} swTD-71A Details of Charges</ChargeCode>
+         <ChargesAccount>{0..1} swTD-25A Charges Account</ChargesAccount>
+         <ExchangeRate>{0..1} swTD-36 Exchange Rate</ExchangeRate>
+      </Transaction>
+      <SKIP>{1..1} swTB- Text Block 4 Trailer tag</SKIP>
+   </Text>
+   <Trailer>
+      <Property>
+         <Tag>{1..1} swTR-SB-T Trailer Sub Block - Tag code</Tag>
+         <Value>{1..1} swTR-SB-V Trailer Sub Block - Value</Value>
+      </Property>
+   </Trailer>
+</MT101>
+

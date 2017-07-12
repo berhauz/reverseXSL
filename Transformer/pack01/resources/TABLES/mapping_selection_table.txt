@@ -1,0 +1,94 @@
+# MAPPING SELECTION TABLE
+# BH - Feb 2011 - www.reverseXSL.com
+
+# This file provides a simple 'rule' mechanism that matches
+# DEF and XSL resources names onto incoming messages. A 'DEF resource' denotes a parser DEFinition file
+# that maps any structure to XML. An 'XSL resource' denotes an XSLT transformation template in a file. 
+#
+# * This table is used by classes in the com.reverseXSL.transform package
+#
+# * The format of each line is as follows:
+# 	- blank lines, empty lines, and those starting with a # are ignored
+# 	- all other lines must bear the format:
+#		"<regex>"<NL>
+#			[<SP>ParserDefinition<SP>=<SP>"<DEF resource name>"<NL>]
+#			[<SP>XSLTransformation<SP>=<SP>"<XSL resource name>"<NL>]
+#			[<SP>Name<SP>=<SP>"a short name for this entry"<NL>]
+#			[<SP>Comment<SP>=<SP>"any comment"<NL>]
+#   where every element is optional and can appear in any order, but the regex.
+#   <NL> indicates a new line which is equally CRLF or LF alone, independently from the Host 
+#   Operating System.
+#
+# * The <regex> shall be designed to associate proper transformations to respective input messages.
+#   The regular expression patterns are tentatively searched into the 'unknown' incoming messages 
+#   in the order supplied within this file. The search stops on the first macth, hence order is important. 
+#
+# * As a safe measure, the present software version is configured to look only up to the first 1500 chars
+#   of the source data message (this value, by experience, encompasses all legacy EDI message headers).
+#   The regular expressions must therefore be designed to match (at least once) some differentiating
+#   chunk in those 1500 characters.
+#
+# * No two regex shall be identical, otherwise at loading-time a "duplicate entry" exception is thrown.
+#
+# * The regex can be delimited by any of "...", '...', /.../, ~...~, or `...` characters, thus
+#   providing the ability the enclose any other delimiter than the choosen one as part of 
+#   the regex expression itself.
+#
+# * When no ParserDefinition, nor XSLTransformation is attached to a regex, this is equivalent to defining
+#   a pass-through operation for some messages, which may be useful given the ordering of table entries.
+#
+# * About DEF and XSL resource path specifications: 
+# 	- if the Mapping Selection Table is used from a jar, the associated XSL templates are loaded
+# 	  via the CLASSPATH, else the JAR itself (according to precedence in the CLASSPATH itself), 
+#         and the paths must therefore be relative to a CLASSPATH member.
+# 	- if, instead, the Mapping Selection Table is loaded from a disk file using the Transform
+#	  command-line tool with the AUTO SELECT option, then, the mapping selection table 
+#	  file is searched within the directory hierarchy, climbing up directories util one is found.
+#	  The starting path is the current working directory of the command-line shell.
+#	  In this case (command line and file-based operations), the
+#	  DEF and XSL resources can also be loaded relative to the one directory containing the found
+#	  mapping selection table file. This 'search-up' feature is particularly useful 
+#	  at development time. Cfr Development-acceleration tips available on www.reverseXSL.com.
+
+# * Recommendation:
+#     Such Mapping Selection Table is suitable for small collections of messages up to a few dozen entries.
+#     The performance will degrade with larger collections. You must then either manage a few different
+#     Mapping tables, each associated to a data exchange context, else use your own mapping selection technique
+#     and invoke the Transformer with the specific parsing DEF and XSL template required by each message.
+
+# NOTE: the regex chunk (?ms) activates MULTILINE mode with (?m) and DOTALL with (?s), thus 
+# matching intermediate line start/end with '^' '$' (MULTILINE), and new line characters with '.' (DOTALL)
+
+#Sample entries:
+
+"myRegular expression here"
+      ParserDefinition = "resources/DEF/AAA.def"
+     XSLTransformation = "resources/XSL/BBB.xsl"
+               Comment = "dummy sample"
+
+#entries regarding message samples included in the software distribution JAR
+# The message files must be extracted from the .jar itself
+
+"(?ms)^FWB/6$"
+      ParserDefinition = "resources/DEF/FWB15.def"
+               Comment = "CARGO-IMP FWB - IATA Air WayBill"
+                  Name = "AirWayBill"
+
+"(?ms)^PRL$"
+      ParserDefinition = "resources/DEF/PRL29.def"
+               Comment = "IATA PSCRM 29th Ed. - Passenger Reconcile List"
+                  Name = "PRL"
+
+"(?s)^\{1:[^\}]+\}\{2:I101"
+      ParserDefinition = "resources/DEF/MT101.def"
+               Comment = "SWIFT MT101 - Request For Transfer"
+                  Name = "MT101"
+
+"(?s)^VAT Quaterly Declaration Form"
+      ParserDefinition = "resources/DEF/VATdeclare.def"
+     XSLTransformation = "resources/XSL/MapToInterVAT.xsl"
+               Comment = "Electronic VAT declaration via BE InterVAT application"
+                  Name = "InterVAT"
+
+
+#--END--

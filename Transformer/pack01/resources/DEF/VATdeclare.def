@@ -1,0 +1,172 @@
+ Electronic VAT Declaration for Belgian Enterprises
+ Source format is CSV exported from MS-Excel Sheet : VATdeclare.xls
+ Target Schema : InterVAT 2008
+    http://minfin.fgov.be/portail2/downloads/e-services/intervat/intervat-aangiften.xsd
+ (prepared by Bernard H. Dec 2008)
+
+  *********************************************************************
+  ** FOREWORD: This sample is a full-fledged message transformation  **
+  ** reflecting true real-world intricacies. Our objective is to     **
+  ** illustrate precisely what this reverseXSL parser is capable of, **
+  ** and how few(!) real-code it does take to handle a true message. **
+  ** The present example turns the raw CSV export from an MS-Excel   **
+  ** worksheet into an XML document featuring the data required by   **
+  ** the InterVAT application on the Belgian Government Portal.      **
+  ** For simplified - tutorial-grade - samples, please look to the   **
+  ** web site: www.ReverseXSL.com                                    **
+  **                                                                 **
+  **  IMPORTANT: understanding Regular Expressions is a MUST before  **
+  **  looking any further; your guessing attempts will be defeated!  **
+  **  A one hour tutorial is available at the web site.              **
+  *********************************************************************
+
+  (every line not starting in column 1 is a comment or annotation ignored by the Parser)
+
+  (best displayed with fixed-spacing font)
+
+  Next lines support integrated testing facilities (within StylusStudio(TM))
+  #ONE=VATdeclaration.csv;
+  #TWO=--N/A--;
+  
+  REVISIONS:
+    - This version and associated samples have been developed
+      to illustrate the parsing of CSV messages and are bound
+      to the terms of use published at www.reversexsl.com
+
+  DESIGN NOTES:
+     * This sample definition parses a raw CSV-formatted export from MS-Excel. 
+     * The target XSL elements are named by the InterVAT electronic VAT
+       declaration format. However, the order of elements does not comply with
+       the original schema and a light post-XSL transformation step shall be 
+       used to reorder elements. Such transformation step is automatically 
+       invoked next to Parsing (only by the licensed software version).
+     * See VATdeclare.xls for the VAT declaration form.
+     * The official XML schema has no namespace, but the present version uses the built-in 
+       ReverseXSL namespace bound to the free transformation software.
+     * The worksheet contains a simplified Export MACRO (a real one shall handle exceptions)
+            Sub Export()
+                ActiveWorkbook.Save    
+                ChDir ActiveWorkbook.Path
+                On Error Resume Next
+                Kill "VATdeclaration.csv"
+                Dim w As Worksheet
+                Set w = Worksheets(1)
+                w.SaveAs Filename:="VATdeclaration.csv", FileFormat:=xlCSV, CreateBackup:=True
+                Dim Taskid
+                Taskid = Shell("MakeDeclaration.bat", 1)
+                Application.Workbooks.Open ("VATdeclare.xls")
+                w.Activate
+                w.Application.ActiveWindow.Close (False)
+            End Sub
+     * The present Excel & Macro are such that your regional/language settings should not affect
+       number formats in the exported CSV (by Microsoft theory...)
+     * The Marco invokes via a DOS batch the Transformation command:
+            java -cp ReverseXSL.jar;. com.reverseXSL.Transform AUTO SELECT VATdeclaration.csv NONE 0 10 1>VATdeclaration.xml 2>VATdeclaration.log
+     * The resulting XML document can then be uploaded into the InterVAT application
+            http://minfin.fgov.be/<...>/e-services/intervat/index.htm
+       except for namespaces that require a licensed version as explained above
+
+     * All DEF lines specify 'T F' codes (==Throw Fatal), meaning that any first deviation from the
+       definition will immediately abort parsing and throw an exception.
+
+     * This method competes with the now built-in support in MS-Excel for XML exports and mappings.
+       However, the interest for the present technique is four fold:
+        - we illustrate the handling of an Excel-based CSV, but CSV-like formats are used by
+          numerous non-Excel applications
+        - there are legacy environments where the CSV is already available and processed elsewhere
+          and one wants to preserve those processing chains
+        - we may like to keep hands on the mapping logic at a central place and prevent by the same token
+          any replication of logic in Macros and XML maps at each workplace.
+        - dependent from the context, we can save on speed of building the solution and its maintenance
+
+  ##### a licence is needed for any real life run (XSLT step skipped without one) #####
+
+ ---------- CONDITIONS ---------------------
+COND RecordNb   "X+"                  DEPTH 1 T W "InterVAT record number placeholder"
+
+ ---------- MESSAGE DEFINITION -------------
+MSG   ""         VATSENDING                             M 1 1 ACC 1     T F "InterVAT root element" CUT-ON-NL
+    *** the next GRouP def actually groups several elements, creating a hierarchy in XML that does not exist in the 'flat' CSV file
+|GRP  ""                    DECLARER                    M 1 1 ACC 1     T F "InterVAT XML schema group DECLARER"
+||D   "^VAT Quaterly.*?,,,REF,(.*?),+$" SENDINGREFERENCE   M 1 1 ACC 1  T F "CSV-R1 capture date from 1st row" ASMATCHED
+||D   "(,+)"                     SKIP                   M 1 1 ACC 1     T F "CSV-R2 match but skip row 2" ASMATCHED
+||SEG "^VAT No,"                 NOTAG                  M 1 1 ACC 1     T F "CSV-R3 VAT country code and Number in row 3" CUT "^VAT No,,(..)([\d.]+),.*$"
+|||D  "(..)"                       COUNTRY              M 1 1 ACC 1     T F "CSV--C3a Country code prefixed to VAT No in cell C3" UPALPHA
+|||D  "(\d+)\.(\d+)\.(\d+)"        VATNUMBER            M 1 1 ACC 1     T F "CSV--C3b VAT number (only digits, dots removed) in cell C3" DIGIT [10..10]
+||SEG "^Name,"                   NOTAG                  M 1 1 ACC 1     T F "CSV-R4 Name and Quarter of reference in row 4" CUT "^Name,,(.*?),,Q(.),.*$"
+|||D  "(.*)"                       NAME                 M 1 1 ACC 1     T F "CSV--C4 Name cell c4" ASMATCHED
+    *** Quarter ref will be extracted below
+|||D  "(.*)"                       _QUARTER             M 1 1 ACC 1     T F "CSV--E4 Quarter declared in cell E4" DIGIT 
+    *** next matching pattern has 2 noteworthy features:
+    ***  - the pattern is framed by ' instead of " thus allowing to use " as a regular char within the pattern
+    ***  - double quotes are optional, added by Excel whenever a ',' is present within the address cell value in proper;
+    ***    therefore the value capture is framed by start and end strings in the entire CSV line instead of assuming always ,"...",
+||D   '^Address,,"?(.*?)"?,,and,+$' ADDRESS             M 1 1 ACC 1     T F "CSV--C5 Street Address in cell C5" ASMATCHED
+||SEG "^ZIP&city,,"             NOTAG                   M 1 1 ACC 1     T F "CSV-R6 Post code and City in row 6" CUT "^ZIP&city,,(\S+)\s+(.*?),,+$"
+|||D  "(.*)"                        POSTCODE            M 1 1 ACC 1     T F "CSV--C6a ZIP code" ASMATCHED
+|||D  "(.*)"                        CITY                M 1 1 ACC 1     T F "CSV--C6b City" ASMATCHED
+||D   "^,,,,,,(.*)"             SKIP                    M 1 1 ACC 1     T F "CSV-R7 skip row 7" ASMATCHED
+
+|GRP  "^YEAR,,"             VATRECORD                   C 1 1 ACC 1     COND RecordNb "X" "InterVAT XML schema group VATRECORD"
+||MARK                          RECNUM                  COND RecordNb "X" "1" "NULL"
+    *** here: VATNUMBER, NAME, ADDRESS, POSTCODE, CITY, COUNTRY be copied from above by the XSL Step
+||SEG "^YEAR,,"                 DPERIODE                M 1 1 ACC 1     T F "CSV-R8 Year and Quarter of reference in row 8" CUT "^YEAR,,(\d+).*Q4,,(Q\d)$"
+|||D  "(.*)"                      YEAR                  M 1 1 ACC 1     T F "CSV-C8 Declared Year of reference" DIGIT [4..4]
+|||D  "Q(.)"                      QUARTER               M 1 1 ACC 1     T F "CSV-E4 Declared Quarter of reference" DIGIT
+||GRP ""                        DATA                    M 1 1 ACC 1     T F "InterVAT XML schema group DATA"
+|||GRP ""                         DATA_ELEM             M 1 1 ACC 1     T F "InterVAT XML schema group DATA"
+    
+    *** fillers
+||||D  "^II\. OUTPUT(.*)"                SKIP                M 1 1 ACC 1     T F "CSV-R9 skip row (labels only, no data)" ASMATCHED
+||||D  "^B,Operations(.*)"          SKIP                M 1 1 ACC 1     T F "CSV-R10 skip row (labels only, no data)" ASMATCHED
+
+    *** Extract relevant data pieces from the end of each exported row thanks to the peculiar worksheet layout
+
+    *** Note that the administration requires to omit elements with value 0.00. This can be achieved by the XSL
+        step, but here we demonstrate how the Parser can also meet such requirement:
+        the following pattern piece (?:0.00()|([\d.]*)) actually captures empty data element values whenever the value matches
+        exactly "0.00", with the consequence that the element is removed from the generated XML thanks to the
+        parser behaviour denoted Remove-Non-Repeatable-Nil-Optional-Elements...cfr documentation
+||||D  "^,,- at the rate of 6%,01,.+,,(?:0.00()|([\d.]*))$"     D1      O 0 1 ACC 1 T F "CSV--J11 Operations for which VAT is due at the rate of 6%" NUMERIC [1..]
+||||D  "^,,- at the rate of 12%,02,.+,,(?:0.00()|([\d.]*))$"    D2      O 0 1 ACC 1 T F "CSV--J12 Operations for which VAT is due at the rate of 12%" NUMERIC [1..]
+||||D  "^,,- at the rate of 21%,03,.+,,(?:0.00()|([\d.]*))$"    D3      O 0 1 ACC 1 T F "CSV--J13 Operations for which VAT is due at the rate of 21%" NUMERIC [1..]
+||||D  "^E,Operations exempt.+,,(?:0.00()|([\d.]*))$"           D47     O 0 1 ACC 1 T F "CSV--J14 Operations exempt from VAT" NUMERIC
+
+    *** fillers
+||||D  "^(,+)"                      SKIP               M 1 1 ACC 1     T F "CSV-R15 skip row (separation line, no data)" ASMATCHED
+||||D  "^III\. INPUT(.*)"           SKIP               M 1 1 ACC 1     T F "CSV-R16 skip row (labels only, no data)" ASMATCHED
+||||D  "^A,Amounts inclusive(.*)"   SKIP               M 1 1 ACC 1     T F "CSV-R17 skip row (labels only, no data)" ASMATCHED
+
+||||D  "^,,- for diverse .*,82,.+,,(?:0.00()|([\d.]*))$"       D82     O 0 1 ACC 1 T F "CSV--J18 Input Amounts...for diverse goods" NUMERIC [1..]
+||||D  "^,,- for capital goods .*,83,.+,,(?:0.00()|([\d.]*))$" D83     O 0 1 ACC 1 T F "CSV--J19 Input Amounts...for captital goods" NUMERIC [1..]
+||||D  "^D,Other operations .*,,87,.+,,(?:0.00()|([\d.]*))$"   D87     O 0 1 ACC 1 T F "CSV--J20 Input Amounts...for which VAT is due by the declarer" NUMERIC [1..]
+
+    *** fillers
+||||D  "^(,+)"                      SKIP               M 1 1 ACC 1     T F "CSV-R21 skip row (separation line, no data)" ASMATCHED
+||||D  "^IV\. TAXES DUE(.*)"        SKIP               M 1 1 ACC 1     T F "CSV-R22 skip row (labels only, no data)" ASMATCHED
+||||D  "^A,VAT bound to(.*)"        SKIP               M 1 1 ACC 1     T F "CSV-R23 skip row (labels only, no data)" ASMATCHED
+
+||||D  "^,,- codes 01 02 03.*,54,.+,,(?:0.00()|([\d.]*))$"     D54     O 0 1 ACC 1 T F "CSV--J24 VAT bound to operations declared under codes 01 02 03" NUMERIC [1..]
+||||D  "^,,- code 87.*,56,.+,,(?:0.00()|([\d.]*))$"            D56     O 0 1 ACC 1 T F "CSV--J25 VAT bound to operations declared under code 87" NUMERIC [1..]
+
+||||D  "^Total,,,XX(.*)"            SKIP               M 1 1 ACC 1     T F "CSV-R26 skip row (data not copied in XML doc)" ASMATCHED
+
+    *** fillers
+||||D  "^(,+)"                      SKIP               M 1 1 ACC 1     T F "CSV-R27 skip row (separation line, no data)" ASMATCHED
+||||D  "^V\. TAXES DEDUC(.*)"       SKIP               M 1 1 ACC 1     T F "CSV-R28 skip row (labels only, no data)" ASMATCHED
+
+||||D  "^A,Deductible VAT .*,,59,.+,,(?:0.00()|([\d.]*))$"     D59     O 0 1 ACC 1 T F "CSV--J29 Deductible VAT" NUMERIC [1..]
+
+||||D  "^Total,,,YY(.*)"            SKIP               M 1 1 ACC 1     T F "CSV-R30 skip row (data not copied in XML doc)" ASMATCHED
+
+    *** fillers
+||||D  "^(,+)"                      SKIP               M 1 1 ACC 1     T F "CSV-R31 skip row (separation line, no data)" ASMATCHED
+||||D  "^VI\. BALANCE(.*)"          SKIP               M 1 1 ACC 1     T F "CSV-R32 skip row (labels only, no data)" ASMATCHED
+
+    *** Only one of the following elements shall appear in the final XML. The MS-Excel formulas actually
+        ensure that one cell contains a number and the other contains " - "; we take advantage from this feature.
+||||D  "^Taxes due -to- .*,,71,.+,,(?: - ()|([\d.]*))$"     D71     O 0 1 ACC 1 T F "CSV--J33 Taxes due -to- VAT Authorities " NUMERIC [1..]
+||||D  "^Taxes due -by- .*,,72,.+,,(?: - ()|([\d.]*))$"     D72     O 0 1 ACC 1 T F "CSV--J34 Taxes due -by- VAT Authorities " NUMERIC [1..]
+
+
+END 

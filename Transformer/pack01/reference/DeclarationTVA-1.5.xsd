@@ -1,0 +1,632 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+	<!-- 
+		WARNING:
+		========
+
+		TO BE COMPLIANT WITH THE XERCES PARSER, THE FORMATTING OF THE XML FILE MUST INCLUDE LINE SEPARATORS AT SOME
+		KEY POSITIONS :
+		- AFTER THE "<?xml ...>" TAG (FIRST LINE),
+		- AFTER THE <VATSENDING xmlns:...> TAG (SECOND LINE) AND
+		- BEFORE THE </VATSENDING> TAG (LAST LINE)
+	-->
+	<!-- definition of attributes -->
+	<xs:attribute name="RESTITUTION">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">demande de restitution</xs:documentation>
+			<xs:documentation xml:lang="nl">aanvraag om terugbetaling</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:pattern value="YES|NO"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:attribute>
+	<xs:attribute name="PAYMENT">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">demande de formulaires de paiement</xs:documentation>
+			<xs:documentation xml:lang="nl">aanvraag van betaalformulieren</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:pattern value="YES|NO"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:attribute>
+	<!-- definition of simple elements -->
+	<xs:element name="VATNUMBER">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">numéro de TVA de l'assujetti en 10 positions</xs:documentation>
+			<xs:documentation xml:lang="nl">BTW nummer van de belastingplichtige in 10 posities</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:pattern value="[0]+[0-9]{9}"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="NAME">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">nom ou dénomination</xs:documentation>
+			<xs:documentation xml:lang="nl">naam of benaming</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="50"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="ADDRESS">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">Adresse: rue, n°, boîte postale</xs:documentation>
+			<xs:documentation xml:lang="nl">Adres: straat, nr, postbus</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="100"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="POSTCODE">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">Code postal</xs:documentation>
+			<xs:documentation xml:lang="nl">Postcode</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="15"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="CITY">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">localité</xs:documentation>
+			<xs:documentation xml:lang="nl">gemeente</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="100"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="COUNTRY">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">Pays (EC- country code)</xs:documentation>
+			<xs:documentation xml:lang="nl">Land (EC- country code)</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="2"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="SENDINGREFERENCE">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">n° de référence unique de l'envoi de la fiduciaire. Ce numéro est déterminé par la fiduciaire.</xs:documentation>
+			<xs:documentation xml:lang="nl">uniek referentie nr van de zending van de fiduciaire</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:unsignedLong">
+				<xs:maxInclusive value="99999999999999"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="RECNUM">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">numéro de suite de la déclaration.</xs:documentation>
+			<xs:documentation xml:lang="nl">volgnummer van de aangifte</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:integer">
+				<xs:minInclusive value="1"/>
+				<xs:maxInclusive value="999"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="QUARTER">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">trimestre de la période</xs:documentation>
+			<xs:documentation xml:lang="nl">kwartaal van de periode</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:integer">
+				<xs:minInclusive value="1"/>
+				<xs:maxInclusive value="4"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="MONTH">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">mois de la période</xs:documentation>
+			<xs:documentation xml:lang="nl">maand van de periode</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:integer">
+				<xs:minInclusive value="1"/>
+				<xs:maxInclusive value="12"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="YEAR">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">année de la période (format YYYY)</xs:documentation>
+			<xs:documentation xml:lang="nl">jaar van de periode (formaat YYYY)</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:gYear"/>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D0">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 00: opérations soumises à un régime particulier</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 00: handelingen onderworpen aan een bijzondere regeling</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D1">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 01: opérations pour lesquelles la T.V.A. est due par le déclarant au taux de 6%</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 01: Handelingen waarvoor de BTW verschuldigd is door de aangever aan het tarief van 6%</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D2">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 02: opérations pour lesquelles la T.V.A. est due par le déclarant au taux de 12%</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 02: Handelingen waarvoor de BTW verschuldigd is door de aangever aan het tarief van 12%.</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D3">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 03: opérations pour lesquelles la T.V.A. est due par le déclarant au taux de 21%</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 03: handelingen waarvoor de BTW verschuldigd is door de aangever aan het tarief van 21%.</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D45">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 45: opérations pour lesquelles la T.V.A. est due par le cocontractant</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 45: handelingen waarvoor de BTW verschuldigd is door de medecontractant</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D46">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 46: livraisons intracommunautaires exemptées effectuées en Belgique et ventes ABC</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 46: vrijgestelde intracommunautaire leveringen in België en ABC-verkopen</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D47">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 47: autres opérations exemptées et opérations effectuées à l'étranger</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 47: andere vrijgestelde handelingen en handelingen verricht in het buitenland</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D48">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 48: montant des notes de crédit délivrées et des corrections négatives relatif aux opérations inscrites en grille 46</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 48: bedrag van de uitgereikte creditnota's en de negatieve verbeteringen met betrekking tot de handelingen ingeschreven in rooster 46</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D49">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 49: montant des notes de crédit délivrées et des corrections négatives relatif aux autres opérations du cadre II</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 49: bedrag van de uitgereikte creditnota's en de negatieve verbeteringen met betrekking tot andere handelingen van kader II</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D54">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 54: T.V.A. relative aux opérations déclarées en grilles 01, 02 et 03</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 54: BTW op handelingen aangegeven in de roosters 01, 02 et 03</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D55">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 55: T.V.A. relative aux opérations déclarées en grille 86</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 55: BTW op handelingen aangegeven in rooster 86</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D56">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 56: T.V.A. relative aux opérations déclarées en grille 87, à l'exception des importations avec report de perception</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 56: BTW op handelingen aangegeven in rooster 87, met uitzondering van invoeren met verlegging van heffing</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D57">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 57: T.V.A. relative aux importations avec report de perception</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 57: BTW op invoeren met verlegging van heffing</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D59">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 59: T.V.A. déductible</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 59: Aftrekbare BTW</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D61">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 61: diverses régularisations T.V.A. en faveur de l'Etat</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 61: diverse BTW-regularisaties in het voordeel van de Staat</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D62">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 62: diverses régularisations T.V.A. en faveur du déclarant</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 62: diverse BTW-regularisaties in het voordeel van de aangever</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D63">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 63: T.V.A. à reverser mentionnée sur les notes de crédit reçues</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 63: terug te storten BTW vermeld op ontvangen creditnota's</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D64">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 64: T.V.A. à récupérer mentionnée sur les notes de crédit délivrées</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 64: te recupereren BTW vermeld op uitgereikte creditnota's</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D71">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 71: taxe due à l'Etat</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 71: aan de Staat verschuldigde belasting</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D72">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 72: sommes dues par l'Etat</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 72: sommen verschuldigd door de Staat</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D81">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 81: montant des opérations à l'entrée compte tenu des notes de crédit reçues et autres corrections : marchandises, matières premières et matières auxiliaires</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 81: bedrag van de inkomende handelingen rekening houdend met de ontvangen creditnota's en andere verbeteringen: handelsgoederen, grond- en hulpstoffen </xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D82">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 82: montant des opérations à l'entrée compte tenu des notes de crédit reçues et autres corrections :services et biens divers</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 82: bedrag van de inkomende handelingen rekening houdend met de ontvangen creditnota's en andere verbeteringen: diensten en diverse goederen </xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D83">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 83: montant des opérations à l'entrée compte tenu des notes de crédit reçues et autres corrections : biens d'investissement</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 83: bedrag van de inkomende handelingen rekening houdend met de ontvangen creditnota's en andere verbeteringen: bedrijfsmiddelen</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D84">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 84: montant des notes de crédit reçues et des corrections négatives : relatif aux opérations inscrites en grille 86</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 84: bedrag van de ontvangen creditnota's en de negatieve verbeteringen met betrekking tot de handelingen ingeschreven in rooster 86</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D85">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 85: montant des notes de crédit reçues et des corrections négatives : relatif aux autres opérations du cadre III</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 85: bedrag van de ontvangen creditnota's en de negatieve verbeteringen met betrekking tot de andere handelingen van kader III</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D86">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 86: acquisitions intracommunautaires effectuées en Belgique et vente ABC</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 86: intracommunautaire verwervingen verricht in België en ABC-verkopen</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D87">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">montant déclaré en grille 87: autres opérations à l'entrée pour lesquelles la T.V.A. est due par le déclarant</xs:documentation>
+			<xs:documentation xml:lang="nl">bedrag aangegeven in rooster 87: andere inkomende handelingen waarvoor de BTW verschuldigd is
+door de aangever</xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<xs:element name="D91">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">Concerne uniquement la déclaration mensuelle de décembre: montant déclaré en grille 91: T.V.A. réellement due pour la période du 1er au 20 décembre</xs:documentation>
+			<xs:documentation xml:lang="nl">Betreft uitsluitend de maandaangifte van december: bedrag aangegeven in rooster 91: werkelijk verschuldigde BTW voor de periode van 1 tot 20 december </xs:documentation>
+		</xs:annotation>
+		<xs:simpleType>
+			<xs:restriction base="xs:string">
+				<xs:maxLength value="14"/>
+				<xs:pattern value="([0-9])+"/>
+			</xs:restriction>
+		</xs:simpleType>
+	</xs:element>
+	<!-- definition of complex elements -->
+	<xs:element name="DECLARER">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">identification de l'expéditeur de la déclaration multiple</xs:documentation>
+			<xs:documentation xml:lang="nl">identificatie van de afzender van de meervoudige aangifte </xs:documentation>
+		</xs:annotation>
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element ref="VATNUMBER"/>
+				<xs:element ref="NAME"/>
+				<xs:element ref="ADDRESS"/>
+				<xs:element ref="POSTCODE"/>
+				<xs:element ref="CITY"/>
+				<xs:element ref="COUNTRY" minOccurs="0"/>
+				<xs:element ref="SENDINGREFERENCE"/>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+	<xs:element name="DPERIODE">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">période concernée par la déclaration. La période concerne un mois ou un trimestre.</xs:documentation>
+			<xs:documentation xml:lang="nl">periode van de aangifte. De periode betreft een maand of een kwartaal.</xs:documentation>
+		</xs:annotation>
+		<xs:complexType>
+			<xs:sequence>
+				<xs:choice>
+					<xs:element ref="QUARTER"/>
+					<xs:element ref="MONTH"/>
+				</xs:choice>
+				<xs:element ref="YEAR"/>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+	<xs:element name="ASK">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">Demandes liées à la déclaration (remboursement et formulaires de paiement)</xs:documentation>
+			<xs:documentation xml:lang="nl">Aanvragen verbonden aan de aangifte (terugbetaling en betaalformulieren) </xs:documentation>
+		</xs:annotation>
+		<xs:complexType>
+			<xs:attribute ref="RESTITUTION" use="required">
+				<xs:annotation>
+					<xs:documentation xml:lang="fr">En cas de demande de remboursement, l'attribut doit avoir la valeur 'YES' </xs:documentation>
+					<xs:documentation xml:lang="nl">In geval van een aanvraag om terugbetaling moet het attribuut de waarde 'YES' bevatten</xs:documentation>
+				</xs:annotation>
+			</xs:attribute>
+			<xs:attribute ref="PAYMENT" use="required">
+				<xs:annotation>
+					<xs:documentation xml:lang="fr">En cas de demande de formulaires de paiement, l'attribut doit avoir la valeur 'YES' </xs:documentation>
+					<xs:documentation xml:lang="nl">In geval van een aanvraag van betaalformulieren moet het attribuut de waarde 'YES' bevatten</xs:documentation>
+				</xs:annotation>
+			</xs:attribute>
+		</xs:complexType>
+	</xs:element>
+	<xs:element name="DATA_ELEM">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">Montants déclarés. Tous les montants sont exprimés en Eurocent.</xs:documentation>
+			<xs:documentation xml:lang="nl">Aangegeven bedragen. Alle bedragen zijn in Eurocent uitgedrukt. </xs:documentation>
+		</xs:annotation>
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element ref="D0" minOccurs="0"/>
+				<xs:element ref="D1" minOccurs="0"/>
+				<xs:element ref="D2" minOccurs="0"/>
+				<xs:element ref="D3" minOccurs="0"/>
+				<xs:element ref="D45" minOccurs="0"/>
+				<xs:element ref="D46" minOccurs="0"/>
+				<xs:element ref="D47" minOccurs="0"/>
+				<xs:element ref="D48" minOccurs="0"/>
+				<xs:element ref="D49" minOccurs="0"/>
+				<xs:element ref="D54" minOccurs="0"/>
+				<xs:element ref="D55" minOccurs="0"/>
+				<xs:element ref="D56" minOccurs="0"/>
+				<xs:element ref="D57" minOccurs="0"/>
+				<xs:element ref="D59" minOccurs="0"/>
+				<xs:element ref="D61" minOccurs="0"/>
+				<xs:element ref="D62" minOccurs="0"/>
+				<xs:element ref="D63" minOccurs="0"/>
+				<xs:element ref="D64" minOccurs="0"/>
+				<xs:choice>
+					<xs:element ref="D71"/>
+					<xs:element ref="D72"/>
+				</xs:choice>
+				<xs:element ref="D81" minOccurs="0"/>
+				<xs:element ref="D82" minOccurs="0"/>
+				<xs:element ref="D83" minOccurs="0"/>
+				<xs:element ref="D84" minOccurs="0"/>
+				<xs:element ref="D85" minOccurs="0"/>
+				<xs:element ref="D86" minOccurs="0"/>
+				<xs:element ref="D87" minOccurs="0"/>
+				<xs:element ref="D91" minOccurs="0"/>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+	<xs:element name="DATA">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">Montants déclarés. Tous les montants sont exprimés en Eurocent.</xs:documentation>
+			<xs:documentation xml:lang="nl">Aangegeven bedragen. Alle bedragen zijn in Eurocent uitgedrukt. </xs:documentation>
+		</xs:annotation>
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element ref="DATA_ELEM"/>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+	<xs:element name="VATRECORD">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">Déclaration TVA d'un assujetti</xs:documentation>
+			<xs:documentation xml:lang="nl">BTW aangifte van een belastingplichtige</xs:documentation>
+		</xs:annotation>
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element ref="RECNUM"/>
+				<xs:element ref="VATNUMBER"/>
+				<xs:element ref="NAME" minOccurs="0"/>
+				<xs:element ref="ADDRESS" minOccurs="0"/>
+				<xs:element ref="POSTCODE" minOccurs="0" />
+				<xs:element ref="CITY" minOccurs="0" />
+				<xs:element ref="COUNTRY" minOccurs="0"/>
+				<xs:element ref="DPERIODE"/>
+				<xs:element ref="ASK"/>
+				<xs:element ref="DATA"/>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+	<xs:element name="VATSENDING">
+		<xs:annotation>
+			<xs:documentation xml:lang="fr">identification de l'envoi</xs:documentation>
+			<xs:documentation xml:lang="nl">identificatie van de zending</xs:documentation>
+		</xs:annotation>
+		<xs:complexType>
+			<xs:sequence>
+				<xs:element ref="DECLARER"/>
+				<xs:element ref="VATRECORD" maxOccurs="unbounded"/>
+			</xs:sequence>
+		</xs:complexType>
+	</xs:element>
+</xs:schema>

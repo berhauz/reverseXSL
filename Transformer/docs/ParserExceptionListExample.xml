@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ParserExceptionList xmlns="http://www.reverseXSL.com/Parser/Exceptions" exceptionsCount="3" relatingToMessageID="121224_102250" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.reverseXSL.com/Parser/Exceptions ParserExceptionList.xsd">
+   <Remark>used DEFinition:resources/Junit/TransformTest_PNL29.def, FatalExceptionsThreshold:10, TotalExceptionsThreshold:100</Remark>
+   <Exception impact="FATAL" sequence="1">
+      <Error class="ParserDataError">Parsing error about element &lt;NOTAG&gt;(TypeB-dotS TypeB Header - .Sender line), context [.ABCDEF 031224] at L:1 O:0, impact [FATAL].</Error>
+      <CausedBy class="ParserMissingMandatorySeg">Missing mandatory segment [NOTAG]! (identifying this "^\.[A-Z0-9]{7,8}" in [.ABCDEF 031224]).</CausedBy>
+   </Exception>
+   <Exception impact="Warning" sequence="2">
+      <Error class="ParserDataError">Parsing error about element &lt;RAW&gt;(TypeB--Garbage lines prefixed to the standard message), context [DataDefinition at DEF line 112] at L:2 O:0, impact [Warning].</Error>
+      <CausedBy class="ParserErrorOccOverMax">Found [1] element occurences over expected maximum [0].</CausedBy>
+   </Exception>
+   <Exception impact="Warning" sequence="3">
+      <Error class="ParserCONDError">Parsing error about condition [StrictTitleList](1707b-2.9 plus AIRIMPv31-2.6.15 name element rule: abbreviations CHD or INF may no longer appear in a name but a CHLD remarks element shall be used), context [&lt;@Title&gt;&lt;@Title&gt;] at L:24 O:7, impact [Warning].</Error>
+      <CausedBy class="ParserFailedCOND">Named CONDition [StrictTitleList] failed! (validating this [MRCHD] against "(?!.*CHD|.*INF).*").</CausedBy>
+   </Exception>
+</ParserExceptionList>

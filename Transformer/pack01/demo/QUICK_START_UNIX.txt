@@ -1,0 +1,98 @@
+Contents:
+1. UNIX/LINUX USE:
+2. LICENSE:
+3. KNOWN ISSUES:
+4. FURTHER INFORMATION:
+
+	[ MS-Windows users are invited to download similar material tuned for  
+	  execution under this family of operating systems: XP, Vista, Windows Server... ]
+
+
+1. UNIX/LINUX USE:
+
+Under UNIX/LINUX, the software is executed with the help of a JVM (Java Virtual Machine)
+of at least version 1.4, that is the only prerequisite.
+
+The directory containing the present file features 3 sample messages
+in well-known non-XML brands:
+	Sample1_MT101.txt 		is a Request for money transfer in SWIFT format.
+							Once confined into the Inter-bank arena, such messages
+							are also used between corporate customers and banks.
+	Sample2_TypeB_FWB.txt	Is an air-freight Waybill message, in other words an 
+							invoice for the carriage of goods as standardised by IATA
+	Sample3_VATdeclare.csv.txt	is a CSV file exported from an MS-Excel sheet. 
+							The original MS-Excel sheet and an associated batch
+							program invoked by a Macro can be extracted from the 
+							/samples directory inside the .jar itself (you can 
+							open a jar file with a zip extractor).
+							
+There are three similar shell scripts 'TransformSample1|2|3.sh' which you
+shall invoke from a shell command like:
+	sh TransformSample1.sh
+
+Just try it now!
+
+These scripts are purely illustrative. A fourth script simply named 'Transform.sh'
+takes the sample file name as argument, alike in:
+	sh Transform.sh Sample2_TypeB_FWB.txt
+
+All these scripts contain a single line of interest! the call to the reverseXSL
+Transformer. Java provides many ways to invoke this same program:
+	
+ a) explicit classpath with main class call:
+	java -cp ReverseXSL.jar  com.reverseXSL.Transform  mySampleDataFile
+ b) jar execution (the main class call is defined inside the jar manifest)
+	java -jar ReverseXSL.jar  mySampleDataFile
+ c) implicit classpath with main class call:
+	CLASSPATH="$CLASSPATH:./ReverseXSL.jar"
+	export CLASSPATH
+	java  com.reverseXSL.Transform  mySampleDataFile
+	
+It is quite important to understand the following:
+ * The main class com.reverseXSL.Transform is only a wrapper around the reverseXSL
+   Transformer API. This API is the true interface of the software. The command line
+   programs, and the scripts by the same token, are purely demonstrative.
+ * Command line programs can also be customised (the source code available in the jar 
+   file). Command line wrappers are useful during development and testing.
+ * The reverseXSL Transformer only needs the input file as argument. It decides
+   dynamically for the appropriate mapping to trigger with the help of a decision
+   table included in the jar itself (cfr resources/TABLES), as described in the
+   documentation.
+ * The mapping is driven by meta-data under the form of a DEF file, also contained
+   in the jar itself (cfr resources/DEF). See documentation, and online tutorials.
+ * The reverseXSL Transformer can also automate XSL-based mappings from XML to XML, 
+   or from XML to anything. Such XSL transformation can be executed alone, else as
+   a post-transformation next to parsing. However, XSL transformation steps
+   are ignored by the free software version. They are therefore not illustrated
+   by the supplied sample message transformations.
+
+
+2. LICENSE REGISTRATION:
+
+	This software is licensed under the Apache 2.0 Open Source license available at: http://www.opensource.org/licenses/apache2.0.php 	
+
+3. KNOWN ISSUES:
+
+	Customary licenses make use of the java preferences backing store system for
+	saving a copy of registration data. You can re-register with the help of the
+	Licensing program described above, at any time, and repeatedly, without harm.
+	
+	On UNIX/LINUX the JVM persists the backing store in a file. Permission issues
+	may yield the following problem:
+	
+	   WARNING: Couldn't flush system prefs: java.util.prefs.BackingStoreException [...]
+	
+	for which remedies are documented within the FAQ list cited here below.
+
+
+4. FURTHER INFORMATION:
+
+Should you have further questions, do not hesitate to look first into the supplied PDF
+documentation, and then the online FAQ:
+	http://www.reversexsl.com/j/index.php?option=com_content&task=category&sectionid=5&id=22&Itemid=65
+else contact us via the web site:
+	http://www.reversexsl.com/j/index.php?option=com_contact&catid=12&Itemid=49
+
+With your help we will be able to improve and shorten the ramping-up time.
+
+(c) reverseXSL.com

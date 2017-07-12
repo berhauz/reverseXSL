@@ -1,0 +1,900 @@
+  IATA CARGO-IMP 27th Edition 2007
+  AIRWAYBILL DATA (FWB) MESSAGE
+  pages 538-581
+  (prepared by Bernard H. Dec 2008)
+
+  *********************************************************************
+  ** FOREWORD: This sample is a full-fledged message transformation  **
+  ** reflecting true real-world intricacies. Our objective is to     **
+  ** illustrate precisely what this reverseXSL parser is capable of, **
+  ** and how few(!) real-code it does take to handle a true message. **
+  ** The Air WayBill is actually one of the most complex messages    **
+  ** of the Cargo-IMP familly of standard IATA messages.             **
+  ** For simplified - tutorial-grade - samples, please look to the   **
+  ** web site: www.ReverseXSL.com                                    **
+  **                                                                 **
+  **  IMPORTANT: understanding Regular Expressions is a MUST before  **
+  **  looking any further; your guessing attempts will be defeated!  **
+  **  A one hour tutorial is available at the web site.              **
+  *********************************************************************
+
+  (every line not starting in column 1 is a comment or annotation ignored by the Parser)
+
+  (best viewed with fixed spacing font)
+
+  Next lines support integrated testing facilities (within StylusStudio)
+  #ONE=TypeB_FWB_01.txt;
+  #TWO=TypeB_FWB_02b.txt;
+
+    REVISIONS:
+    - This version and associated samples have been packed
+      to illustrate the parsing of IATA messages and are bound
+      to the terms of use published at www.reverseXSL.com
+
+    DESIGN NOTES:
+     * The IATA air waybill message is a very screwy one! because its structure 
+       mimics waybill printing instead of reflecting business semantics; so, 
+       we designed fairly subtle seg/grp assemblies that help restore a cleaner 
+       semantical structure from the print-like structure of the official 
+       message specifications.
+     * We try to be strict on the minimal requirements for this message to bear 
+       any meaning (i.e. consignment details, destination and rate), but then we 
+       are very flexible with all the rest.
+     * We accept lowercase and fields with increased length wherever possible.
+     * However, we raise warnings for any deviation.
+       THIS TRANSFORMATION IS BEST RUN WITH MaxFatalExceptions=0 & MaxTotalExceptions=10
+     * As far as code lists are concerned, we do not check them but where the 
+       meaning of other data elements is affected by code values
+     * All data element dependency conditions are verified and yield a warning
+     * Qualified elements naturally map to attributes e.g. like <Weight Unit="KILOS">3</Weight>
+     * We try keeping one word XML data element names whenever the meaning can be
+       expressed by element hierarchies. For instance: 
+                   <Waybill>...
+                      <Shipper>...
+                        <Contact>...
+                            <Number>1655123321</Number>
+                    <Routing>...
+                        <Onward>...
+                            <Destination>LON</Destination>
+       
+
+ ----------CONDITIONS---------------------
+ *** yes, this message is full of inter-dependencies! some conditions look like copies of each-other but do
+ *** bear distinct descriptions, essential for quickly fixing syntax errors in the source message
+COND ThisVersion    ".*"              DEPTH 0 R W "Enforce a reference to this parser definition version"
+COND ShipCode1      "T"               DEPTH 2 R W "FWB-2.3.2 Shipment Description Code ! can only be T i.e. Total"
+COND WeightCode1    "[KL]"            DEPTH 2 R W "FWB-2.3.4 Weight Code ! must be K or L"
+COND VolumeCode1    "CC|CF|CI|MC|DG"  DEPTH 2 R W "FWB-2.4&2.5 Volume or Density"
+COND ContactCode1   "TE|FX|TL"        DEPTH 3 R W "FWB-5.8.2 Shipper Contact Identifier"
+COND ContactCode2   "TE|FX|TL"        DEPTH 3 R W "FWB-6.8.2 Consignee Contact Identifier"
+COND ContactCode3   "TE|FX|TL"        DEPTH 3 R W "FWB-9.6.2 Also Notify Contact Identifier"
+COND SSRGroup       "GSTT{0,2}"       DEPTH 1 R W "FWB-8 Special Service Request ! can have max three lines, with only first one tagged"
+COND ACCGroup       "GATT{0,5}"       DEPTH 1 R W "FWB-10 Accounting Information ! can have max six lines, with only first one tagged"
+COND AccntInfoCode  "CRN|CRD|CRI|GEN|GBL|MCO|STL|RET|SRN" DEPTH 2 R W "FWB-10.2.2 Accounting Information Identifier"
+COND PrepaidCollect "PP|PC|CC|CP"     DEPTH 3 R F "FWB-11.7 Prepaid/Collect Charge Declarations ! only P and C letter codes are meaningful"
+COND ValueDeclared1 ".*"              DEPTH 4 R W "FWB-11.8 Value for Carriage Declaration ! no checking but marking!"
+COND ValueDeclared2 ".*"              DEPTH 4 R W "FWB-11.10 Value for Customs Declaration ! no checking but marking!"
+COND ValueDeclared3 ".*"              DEPTH 4 R W "FWB-11.11 Value for Insurance Declaration ! no checking but marking!"
+COND WeightCode2    "[KL]"            DEPTH 4 R W "FWB-12.4.2 Weight Code ! must be K or L"
+COND WeightCode3    "[KL]"            DEPTH 6 R W "FWB-12.13.5 Weight Code ! must be K or L"
+COND VolumeCode2    "CC|CF|CI|MC"     DEPTH 4 R W "FWB-12.14.5 Volume Code validation"
+COND TotalRateLines "[RL]{1,11}L?"    DEPTH 1 R W "FWB-12 Rate Description ! max 11 waybill rate lines, and a 12th line limited to goods description"
+COND PrepaidCollectQ "P|C"            DEPTH 2 R W "FWB-13.2.2 Prepaid/Collect Indicator ! only P and C codes are meaningful"
+COND OTHGroup       "GOI+"            DEPTH 1 R W "FWB-13 Other Charges ! can repeat, but with only first line tagged OTH" 
+COND PPDCOLGroup    "S(PT)?(CT)?"     DEPTH 1 R W "FWB-14&15 Prepaid/Collect Charge Summary ! at least one of PPD or COL is compulsory, with charge Total element compulsory"
+COND OSIGroup       "GOTT?"           DEPTH 1 R W "FWB-18 Other Service Information ! can repeat where only the 1st line is tagged OSI"
+COND OneSenderID    "S"               DEPTH 1 R W "FWB-20.3&6 Sender Office Message Address or Participant Identification ! Only one of (exclusively)"
+COND CommissionInfo "I|A|P"           DEPTH 1 R W "FWB-22.3&5&7 Commission Indicator/Amount/Percentage ! Only one of the three can be supplied"
+COND SRIinfo        "S[NI]+"          DEPTH 1 R W "FWB-27 Shipment Reference Information ! at least one of ref number or supplementary info must be supplied"
+COND OneOtherID     "P"               DEPTH 2 R W "FWB-28.6&9 Other Participant Office Message Address or Participant Identification ! Only one of (exclusively)"
+COND OCIGroup        "GOI+"           DEPTH 1 R W "FWB-29 Other Customs Information ! can repeat, but with only first line tagged OCI" 
+
+ ----------MESSAGE DEFINITION-------------
+
+MSG     ""                FWB             M 1 1 ACC 1   R F "FWB-0 Full Message with Type-B header" CUT-ON-NL /FWB
+|MARK                    @SourceDEF       COND ThisVersion ".*" "IATA/FWB15.def" "NULL"
+
+ ===== [0] IATA Type-B header =====
+ *** variant headers are in use by airlines over the SITA network. The definition below
+ *** accepts the pure ASCII version. Other variants featuring leading/trailing empty lines and control chars do pass
+ *** through the built-in data conversions in the Transformer (depollute with: _NoCtrlBytes+_NoBlankLine+_ToCRLF+_ToUPPER)
+ *** The header is possibly extended with a second address group (common practice, not in formal specs)
+ *** before the .SENDER line.
+
+ *** In case there's no header, the message would begin immediately with the SMI code 'FWB'
+|GRP    "^(?!FWB)"    TypeBHeader         O 0 1 ACC 1   R F "TypeB-0 TypeB header with optional SITA network prefix" /TypeB
+||D     "ZCZC(.*)"       SKIP             O 0 1 ACC 1   R W "SITA-ZC Optional SITA network legacy message framing, ignored" ASMATCHED
+
+ *** first header block with message priority indicator
+||SEG "^(Q. )?([A-Z0-9]{7,8}\s)*[A-Z0-9]{7,8}\s*$" NOTAG M 1 4 ACC 8 R F "TypeB-G1 Type-B Recipient line" CUT "(\S+)"
+|||D  "^(Q.)"             @Priority       O 0 1 ACC 1   R W "TypeB-P TypeB Header - Priority Indicator" ASMATCHED
+|||D  "(.+)"              Recipient       M 1 8 ACC 20  R W "TypeB-R TypeB Header - IATA Recipient" UPALPHANUM [7..8]
+
+ *** optional second header block, semantically like a CopyTo set, starting with ".<space><anything><CRLF>" or ".<CRLF>"
+||GRP   "^\.( .*$|$)"    CopyTo           O 0 1 ACC 1   R W "TypeB-G2 Type-B Optional 2nd Recipient block"
+|||D    "^\.( .*$|$)"      SKIP           M 1 1 ACC 1   R F "TypeB-G2dotS Type-B 2nd Recipient block - dummy sender line prefix" ASMATCHED
+|||SEG  "^(Q. )?([A-Z0-9]{7,8}\s)*[A-Z0-9]{7,8}\s*$" NOTAG  M 1 4 ACC 8 R W "TypeB-G2L Type-B 2nd Recipient block - Recipient line" CUT "(\S+)"
+||||D   "^(Q.)"              SKIP         O 0 1 ACC 1   R W "TypeB-G2P Type-B 2nd Recipient block - Priority Indicator, ignored" ASMATCHED
+||||D   "(.*)"               Recipient    M 1 8 ACC 20  R W "TypeB-G2R Type-B 2nd Recipient block - IATA Recipient" UPALPHANUM [7..8]
+
+ *** .SENDER line with optional references, substructured as double-signature/date, or date alone, or anything else (we do not parse PIMA refs here)
+||SEG "^\.[A-Z0-9]{7,8}" NOTAG            M 1 1 ACC 1   R F "TypeB-dotS TypeB Header - .Sender line" CUT "^\.(\S+)(?:\s+(\S.*?))?\s*$"
+|||D    "(.*)"             Sender         M 1 1 ACC 1   R W "TypeB-S TypeB Header - IATA Sender" UPALPHANUM [7..8]
+ *** Refs are like "XY/DDHHMM", "XY/DDHHMM ANYTHING", "XYZ/DDHHMM ANYTHING", "DDHHMM ANYTHING", "ANYTHING", ...
+|||SEG  ".+"               NOTAG          O 0 1 ACC 1   R W "TypeB-SR TypeB Header - IATA Sender References" CUT "^(...?/)?(\d{6})?\s?(\S.*)?$"
+||||D   "(...?)/"            DoubleSignature O 0 1 ACC 1 R W "TypeB-DS TypeB Header - Double Signature (Billing-to)" UPALPHANUM [2..3]
+||||SEG "^(\d{6})$"          Date         O 0 1 ACC 1   R W "TypeB-DT TypeB Header - Date DDHHMM" CUT-FIXED-(2)
+|||||D  "(..)"                 Day        M 1 1 ACC 1   R W "TypeB-DD TypeB Header - Date - Day DD" DIGIT
+|||||D  "(..)"                 HH         M 1 1 ACC 1   R W "TypeB-HH TypeB Header - Date - Hour HH" DIGIT
+|||||D  "(..)"                 MM         M 1 1 ACC 1   R W "TypeB-MM TypeB Header - Date - Minutes MM" DIGIT
+||||D   "(.*)"               References   O 0 1 ACC 1   R W "TypeB-REF TypeB Header - Sender References - unparsed" ASMATCHED
+
+ *** poorly formatted messages may contain a few prefix lines before the formal SMI (Standard Message Identifier)
+||D "^(?!FWB/)(.*)$"     RAW              O 0 0 ACC 5   R W "FWB-- Garbage lines prefixed to the standard message" ASMATCHED
+
+ ===== END of Type-B header (this header definition is identical for all IATA messages) ===== 
+
+ /!\ /!\ /!\ all data element descriptions below bear the reference to the element number in IATA FWB message specifications
+ 
+ ===== [1] Message Identification =====
+|SEG    "^FWB"       NOTAG                M 1 1 ACC 1   R F "FWB-1 Standard Message Identification" CUT-ON-(/)
+||D     "(FWB)"        Type               M 1 1 ACC 1   R W "FWB-1.1 Standard Message Identifier" ASMATCHED
+||D     "(.*)"         Version            M 1 1 ACC 1   R W "FWB-1.3 Message Type Version" DIGIT
+
+ ===== [2] AWB Consignment Details =====
+|SEG   "^.{3}-"      Consignment          M 1 1 ACC 1   R F "FWB-2 AWB Consignment Details" CUT "^(...)-(........)(...)(...)/([A-Z]\d+)([A-Z][\d.,]+)([A-Z][A-Z][\d.,]+)?$"
+||GRP  ""              AWB                M 1 1 ACC 1   R W "FWB-2.1 AWB (Air Way Bill) Identification"
+|||D   "(.*)"            Airline          M 1 1 ACC 1   R W "FWB-2.1.1 Airline Prefix" DIGIT
+|||D   "(.*)"            SerialNb         M 1 1 ACC 1   R W "FWB-2.1.3 AWB Serial Number" DIGIT
+||D    "(.*)"          Origin             M 1 1 ACC 1   R W "FWB-2.2.1 Airport/City Code of Origin" UPALPHA
+||D    "(.*)"          Destination        M 1 1 ACC 1   R W "FWB-2.2.2 Airport/City Code of Destination" UPALPHA
+
+    *** TIP: it's easy to adjust the structure below to be more or less restrictive, see example in the next segment
+||SEG   "^[A-Z]\d+$"   Shipped            M 1 1 ACC 1   R W "FWB-2.3.2&3 Shipment Description" CUT "^(.)(.*)$"
+|||D    "(.)"            @Code            C 1 1 ACC 1   COND ShipCode1 "(.)" "FWB-2.3.2 Shipment Description Code" UPALPHA
+|||D    "(.*)"           Pieces           M 1 1 ACC 1   R W "FWB-2.3.3 Number of Pieces" DIGIT [..4]
+|||MARK                  @Qualifier       COND ShipCode1 "T" "TOTAL" "INVALID_SHIPMENT_CODE"
+
+    *** TIP: it's easy to adjust the structure below to be more or less restrictive, e.g. accepting 'P' for POUNDS too but keeping a warning in the CONDition!
+||SEG "^[A-Z][\d.,]+$" Weight             M 1 1 ACC 1   R W "FWB-2.3.4&5 Weight Code and Weight" CUT "^(.)(.*)$"
+|||D        "(.)"        @Code            C 1 1 ACC 1   COND WeightCode1 "(.)" "FWB-2.3.4 Weight Code" UPALPHA
+|||D        "(.*)"       Amount           M 1 1 ACC 1   R W "FWB-2.3.5 Weight" NUMERIC [..7]
+    --- only one of the following marks will match the condition, thus mapping the code into a single qualifier attribute
+|||MARK                  @Unit            COND WeightCode1 "K" "KILOS" "NULL"
+|||MARK                  @Unit            COND WeightCode1 "L" "POUNDS" "NULL"
+|||MARK                  @Unit            COND WeightCode1 "P" "POUNDS" "NULL"
+|||MARK                  @Unit            COND WeightCode1 "K|L|P" "NULL" "UNKNOWN_WEIGHT_CODE"
+
+||SEG    "[A-Z][A-Z][\d.]+" NOTAG         O 0 1 ACC 1   R W "FWB-2.4&5 Volume or Density" CUT "^(..)(.*)$"
+|||GRP "^DG$"            Density          O 0 1 ACC 1   R W "FWB-2.5 Density"
+||||D    "(DG)"            SKIP           C 1 1 ACC 1   COND VolumeCode1 "DG" "FWB-2.5.1 Density Indicator" ASMATCHED
+||||D    "(.*)"            Group          M 1 1 ACC 1   R W "FWB-2.5.2 Density Group" NUMERIC [..2]
+|||GRP "^(?!DG)"         Volume           O 0 1 ACC 1   R W "FWB-2.4 Volume"
+||||D    "(..)"            @Code          C 1 1 ACC 1   COND VolumeCode1 "(..)" "FWB-2.4.1 Volume Code" UPALPHA
+||||D    "(.*)"            Amount         M 1 1 ACC 1   R W "FWB-2.4.2 Volume Amount" NUMERIC [..9]
+    --- only one of the following marks will match the condition, thus mapping the code into a single Unit attribute
+||||MARK                   @Unit          COND VolumeCode1 "CC" "CUBIC_CENTIMETRES" "NULL"
+||||MARK                   @Unit          COND VolumeCode1 "CF" "CUBIC_FEET" "NULL"
+||||MARK                   @Unit          COND VolumeCode1 "CI" "CUBIC_INCHES" "NULL"
+||||MARK                   @Unit          COND VolumeCode1 "MC" "CUBIC_METRES" "NULL"
+||||MARK                   @Unit          COND VolumeCode1 "CC|CF|CI|MC" "NULL" "UNKNOWN_VOLUME_CODE"
+
+ ===== [3] Flight Bookings =====
+|SEG    "^FLT"       Bookings             O 0 1 ACC 9   R W "FWB-3 Flight Bookings" CUT-ON-(/)
+||D     "(FLT)"        SKIP               M 1 1 ACC 1   R W "FWB-3.1 FLT Line Identifier" ASMATCHED
+     *** repeating flights max? undefined in specs
+||GRP    ""            Flight             M 1 2 ACC 9   R W "FWB-3.2 Flight Identification"
+|||SEG   ""              NOTAG            M 1 1 ACC 1   R W "FWB-3.2.2&3 Carrier Code and Flight Number" CUT "^(..\D?)(.{2,5})$"
+     *** Airline code actual format is either aa, na or an. For future planning purposes, the format may become “aaa”.
+||||D    "(.*)"            Carrier        M 1 1 ACC 1   R W "FWB-3.2.2 Carrier Code" UPALPHANUM
+||||D    "(.*)"            Number         M 1 1 ACC 1   R W "FWB-3.2.3 Flight Number" UPALPHANUM
+|||D     "(.*)"          Day              M 1 1 ACC 1   R F "FWB-3.2.5 Day" DIGIT [2..2]
+
+
+ ===== [4] Routing =====
+|SEG    "^RTG"       Routing              O 1 1 ACC 9   R W "FWB-4 Routing" CUT-ON-(/)
+||D     "(RTG)"        SKIP               M 1 1 ACC 1   R W "FWB-4.1 RTG Line Identifier" ASMATCHED
+||SEG   ""             First              M 1 1 ACC 1   R W "FWB-4.2 First Destination/Carrier" CUT "^((...)?)(..\D?)$"
+|||D    "(.*)"           Destination      O 0 1 ACC 1   R W "FWB-4.2.2 Airport/City code" UPALPHANUM [3..3]
+       *** Airline code actual format is either aa, na or an. For future planning purposes, the format may become “aaa”.
+       *** FIX: this poses a syntactical problem because we could not dissociate isolated city codes from isolated 'aaa' carrier codes
+|||D    "(.*)"           Carrier          M 1 1 ACC 1   R W "FWB-4.2.3 Carrier Code" UPALPHANUM [2..3]
+||SEG   ""             Onward             O 0 2 ACC 9   R W "FWB-4.3 Onward Destination/Carrier" CUT "^(...)(..\D?)?$"
+|||D    "(.*)"           Destination      M 1 1 ACC 1   R W "FWB-4.3.2 Airport/City code" UPALPHANUM [3..3]
+         *** Airline code actual format is either aa, na or an. For future planning purposes, the format may become “aaa”.
+|||D    "(.*)"           Carrier          O 0 1 ACC 1   R W "FWB-4.3.3 Carrier Code" UPALPHANUM [2..3]
+
+ ===== [5] Shipper =====
+|GRP    "^SHP"       Shipper              O 1 1 ACC 1   R W "FWB-5 Shipper" 
+||SEG   "^SHP"         NOTAG              M 1 1 ACC 1   R W "FWB-5.2 Account Detail" CUT-ON-(/)
+|||D    "(SHP)"          SKIP             M 1 1 ACC 1   R W "FWB-5.1 SHP Line Identifier" ASMATCHED
+|||D    "(.*)"           AccountNb        O 0 1 ACC 1   R W "FWB-5.2.2 Account Number" IATA [1..14]
+||D     "/(.*)"        Name               M 1 1 ACC 1   R W "FWB-5.4 Name" IATA [..35]
+||D     "/(.*)"        Street             M 1 1 ACC 1   R W "FWB-5.5 Street Address" IATA [..35]
+||SEG   "^/"           NOTAG              M 1 1 ACC 1   R W "FWB-5.6 Location" CUT "/[^/]*"
+|||D    "/(.*)"          Place            M 1 1 ACC 1   R W "FWB-5.6.2 Place" IATA [..17]
+|||D    "/(.*)"          StateOrProvince  O 0 1 ACC 1   R W "FWB-5.6.4 State/Province" IATA [1..9]
+||SEG   "^/"           NOTAG              M 1 1 ACC 1   R W "FWB-5.7&8 Coded Location & Contacts" CUT "/[^/]*"
+|||D    "/(.*)"          Country          M 1 1 ACC 1   R W "FWB-5.7.2 ISO Country Code" UPALPHA [2..2]
+|||D    "/(.*)"          PostCode         O 0 1 ACC 1   R W "FWB-5.7.4 Post Code" IATA [1..9]
+|||GRP  "^/"             Contact          O 0 9 ACC 9   R W "FWB-5.8 Contact Detail"
+||||D   "/(.*)"            @Code          C 1 1 ACC 1   COND ContactCode1 "/(.*)" "FWB-5.8.2 Contact Identifier" UPALPHANUM [..3]
+||||D   "/(.*)"            Number         M 1 1 ACC 1   R W "FWB-5.8.4 Contact Number" UPALPHANUM [..25]
+    --- only one of the following marks will match the condition, thus mapping the code into a single qualifier attribute
+||||MARK                   @Qualifier     COND ContactCode1 "TE" "TELEPHONE" "NULL"
+||||MARK                   @Qualifier     COND ContactCode1 "FX" "FAX" "NULL"
+||||MARK                   @Qualifier     COND ContactCode1 "TL" "TELEX" "NULL"
+||||MARK                   @Qualifier     COND ContactCode1 "TE|TL|FX" "NULL" "UNKNOWN_CONTACT_CODE"
+
+ ===== [6] Consignee =====
+|GRP    "^CNE"       Consignee            O 1 1 ACC 1   R W "FWB-6 Consignee" 
+||SEG   "^CNE"         NOTAG              M 1 1 ACC 1   R W "FWB-6.2 Account Detail" CUT-ON-(/)
+|||D    "(CNE)"          SKIP             M 1 1 ACC 1   R W "FWB-6.1 CNE Line Identifier" ASMATCHED
+|||D    "(.*)"           AccountNb        O 0 1 ACC 1   R W "FWB-6.2.2 Account Number" IATA [1..14]
+||D     "/(.*)"        Name               M 1 1 ACC 1   R W "FWB-6.4 Name" IATA [..35]
+||D     "/(.*)"        Street             M 1 1 ACC 1   R W "FWB-6.5 Street Address" IATA [..35]
+||SEG   "^/"           NOTAG              M 1 1 ACC 1   R W "FWB-6.6 Location" CUT "/[^/]*"
+|||D    "/(.*)"          Place            M 1 1 ACC 1   R W "FWB-6.6.2 Place" IATA [..17]
+|||D    "/(.*)"          StateOrProvince  O 0 1 ACC 1   R W "FWB-6.6.4 State/Province" IATA [1..9]
+||SEG   "^/"           NOTAG              M 1 1 ACC 1   R W "FWB-6.7&8 Coded Location & Contacts" CUT "/[^/]*"
+|||D    "/(.*)"          Country          M 1 1 ACC 1   R W "FWB-6.7.2 ISO Country Code" UPALPHA [2..2]
+|||D    "/(.*)"          PostCode         O 0 1 ACC 1   R W "FWB-6.7.4 Post Code" IATA [1..9]
+|||GRP  "^/"             Contact          O 0 5 ACC 10  R W "FWB-6.8 Contact Detail"
+||||D   "/(.*)"            @Code          C 1 1 ACC 1   COND ContactCode2 "/(.*)" "FWB-6.8.2 Contact Identifier" UPALPHANUM [..3]
+||||D   "/(.*)"            Number         M 1 1 ACC 1   R W "FWB-6.8.4 Contact Number" UPALPHANUM [..25]
+    --- only one of the following marks will match the condition, thus mapping the code into a single qualifier attribute
+||||MARK                   @Qualifier     COND ContactCode2 "TE" "TELEPHONE" "NULL"
+||||MARK                   @Qualifier     COND ContactCode2 "FX" "FAX" "NULL"
+||||MARK                   @Qualifier     COND ContactCode2 "TL" "TELEX" "NULL"
+||||MARK                   @Qualifier     COND ContactCode2 "TE|TL|FX" "NULL" "UNKNOWN_CONTACT_CODE"
+
+ ===== [7] Agent =====
+|GRP    "^AGT"       Agent                O 0 1 ACC 1   R W "FWB-7 Agent" 
+||SEG   "^AGT"         NOTAG              M 1 1 ACC 1   R W "FWB-7.2 Account Detail" CUT-ON-(/)
+|||D    "(AGT)"          SKIP             M 1 1 ACC 1   R W "FWB-7.1 AGT Line Identifier" ASMATCHED
+|||D    "(.*)"           AccountNb        O 0 1 ACC 1   R W "FWB-7.2.2 Account Number" IATA [1..14]
+|||D    "(.*)"           IATANumericCode  O 1 1 ACC 1   R W "FWB-7.2.4 IATA Cargo Agent Numeric Code" DIGIT [7..7]
+|||D    "(.*)"           IATACASSAddress  O 0 1 ACC 1   R W "FWB-7.2.6 IATA Cargo Agent CASS Address" IATA [4..4]
+|||D    "(.*)"           ParticipantID    O 0 1 ACC 1   R W "FWB-7.2.8 Participant Identifier" UPALPHANUM [1..3]
+||D     "/(.*)"        Name               M 1 1 ACC 1   R W "FWB-7.4.2 Name" IATA [1..35]
+||D     "/(.*)"        Place              O 1 1 ACC 1   R W "FWB-7.5.2 Place" IATA [1..17]
+
+ ===== [8] Special Service Request =====
+|GRP    "^SSR"       SpecialService       C 0 1 ACC 1   COND SSRGroup "G" "FWB-8 Special Service Request - Group"
+    *** we match the 1st SSR line and all subsequent ones through the same structure below
+    *** so that we can also easily accept more lines, yet raise warnings according to the CONDition
+||SEG   "^(SSR)?/"     NOTAG              M 1 999 ACC 999 R W "FWB-8 Special Service Request" CUT-ON-(/)
+|||D    "(SSR|)"         SKIP             C 1 1 ACC 1   COND SSRGroup "(.).*" "FWB-8.1 SSR Line Identifier" ASMATCHED
+|||D    "(.*)"           Request          C 1 1 ACC 1   COND SSRGroup "T" "FWB-8.3 Special Service Request" IATA [..65]
+
+ ===== [9] Also Notify =====
+|GRP    "^NFY"       AlsoNotify           O 0 1 ACC 1   R W "FWB-9 Also Notify" 
+||SEG   "^NFY"         NOTAG              M 1 1 ACC 1   R W "FWB-9.2 Account Detail" CUT-ON-(/)
+|||D    "(NFY)"          SKIP             M 1 1 ACC 1   R W "FWB-9.1 NFY Line Identifier" ASMATCHED
+|||D    "(.*)"           Name             O 1 1 ACC 1   R W "FWB-9.2.2 Name" IATA [..35]
+||D     "/(.*)"        Street             M 1 1 ACC 1   R W "FWB-9.3 Street Address" IATA [..35]
+||SEG   "^/"           NOTAG              M 1 1 ACC 1   R W "FWB-9.4 Location" CUT "/[^/]*"
+|||D    "/(.*)"          Place            M 1 1 ACC 1   R W "FWB-9.4.2 Place" IATA [..17]
+|||D    "/(.*)"          StateOrProvince  O 0 1 ACC 1   R W "FWB-9.4.4 State/Province" IATA [1..9]
+||SEG   "^/"           NOTAG              M 1 1 ACC 1   R W "FWB-9.5&6 Coded Location & Contacts" CUT "/[^/]*"
+|||D    "/(.*)"          Country          M 1 1 ACC 1   R W "FWB-9.5.2 ISO Country Code" UPALPHA [2..2]
+|||D    "/(.*)"          PostCode         O 0 1 ACC 1   R W "FWB-9.5.4 Post Code" IATA [1..9]
+|||GRP  "^/"             Contact          O 0 5 ACC 10  R W "FWB-9.6 Contact Detail"
+||||D   "/(.*)"            @Code          C 1 1 ACC 1   COND ContactCode3 "/(.*)" "FWB-9.6.2 Contact Identifier" UPALPHANUM [..3]
+||||D   "/(.*)"            Number         M 1 1 ACC 1   R W "FWB-9.6.4 Contact Number" UPALPHANUM [..25]
+    --- only one of the following marks will match the condition, thus mapping the code into a single qualifier attribute
+||||MARK                   @Qualifier     COND ContactCode3 "TE" "TELEPHONE" "NULL"
+||||MARK                   @Qualifier     COND ContactCode3 "FX" "FAX" "NULL"
+||||MARK                   @Qualifier     COND ContactCode3 "TL" "TELEX" "NULL"
+||||MARK                   @Qualifier     COND ContactCode3 "TE|TL|FX" "NULL" "UNKNOWN_CONTACT_CODE"
+
+ ===== [10] Accounting Information =====
+|GRP    "^ACC"       Accounting           C 0 1 ACC 1        COND ACCGroup "G" "FWB-10 Accounting Information - Group"
+    *** we match the 1st ACC line and all subsequent ones through the same structure below
+    *** so that we can also easily accept more lines, yet raise warnings according to the CONDition
+||SEG   "^(ACC)?/"     Detail             M 1 6 ACC 999 R W "FWB-10 Accounting Information" CUT-ON-(/)
+|||D    "(ACC|)"         SKIP             C 1 1 ACC 1   COND ACCGroup "(.).*" "FWB-10.1 ACC Line Identifier" ASMATCHED
+|||D    "(.*)"           @Code            C 1 1 ACC 1   COND AccntInfoCode "(.*)" "FWB-10.2.2 Accounting Information Identifier" UPALPHA [3..3]
+|||D    "(.*)"           Information      C 1 1 ACC 1   COND ACCGroup "T" "FWB-10.2.4 Accounting Information" IATA [..34]
+    --- only one of the following marks will match the condition, thus mapping the code into a single qualifier attribute
+|||MARK                  @Qualifier       COND AccntInfoCode "CRN" "CREDIT_CARD_NUMBER" "NULL" 
+|||MARK                  @Qualifier       COND AccntInfoCode "CRD" "CREDIT_CARD_EXPIRY_DATE" "NULL" 
+|||MARK                  @Qualifier       COND AccntInfoCode "CRI" "CREDIT_CARD_ISSUANCE_NAME" "NULL" 
+|||MARK                  @Qualifier       COND AccntInfoCode "GEN" "GENERAL_INFORMATION" "NULL" 
+|||MARK                  @Qualifier       COND AccntInfoCode "GBL" "GOVERNMENT_BILL_OF_LADING" "NULL" 
+|||MARK                  @Qualifier       COND AccntInfoCode "MCO" "MISCELLANEOUS_CHARGE_ORDER" "NULL" 
+|||MARK                  @Qualifier       COND AccntInfoCode "STL" "MODE_OF_SETTLEMENT" "NULL" 
+|||MARK                  @Qualifier       COND AccntInfoCode "RET" "RETURN_TO_ORIGIN" "NULL" 
+|||MARK                  @Qualifier       COND AccntInfoCode "SRN" "SHIPPERS_REFERENCE_NUMBER" "NULL" 
+|||MARK                  @Qualifier       COND AccntInfoCode "CRN|CRD|CRI|GEN|GBL|MCO|STL|RET|SRN" "NULL" "UNKNOWN_ACCOUNT_INFO_IDENTIFIER"
+
+ ===== [11] Charge Declarations =====
+
+|SEG   "^CVD/"       Charge               M 1 1 ACC 1   R F "FWB-11 Charge Declarations" CUT-ON-(/)
+||D    "(CVD)"         SKIP               M 1 1 ACC 1   R W "FWB-11.1 CVD Line Identifier" ASMATCHED
+||D    "(.*)"          Currency           O 1 1 ACC 1   R W "FWB-11.3 ISO Currency Code" UPALPHA [3..3]
+||GRP  ""              Charges            M 1 1 ACC 1   R W "FWB-5&7 Charges Code/Prepaid/Collect"
+|||D   "(.*)"            @Code            O 0 1 ACC 1   R W "FWB-11.5 Charge Code" UPALPHA [2..2]
+    --- /!\ the next element is only used to fill a condition and then mapped onto distinct XML elements using Marks
+|||D   "(.*)"            SKIP             C 0 1 ACC 1   COND PrepaidCollect "(.*)" "FWB-11.7 Prepaid/Collect Charge Declarations" UPALPHA [2..2]
+|||MARK                  WeightAndValuation COND PrepaidCollect "P." "PREPAID" "COLLECT"
+|||MARK                  OtherCharges     COND PrepaidCollect ".P" "PREPAID" "COLLECT"
+||GRP  ""              Declarations       M 1 1 ACC 1   R W "FWB-11.8to11 Value Declarations"
+|||SEG ""                Carriage         O 1 1 ACC 1   R W "FWB-11.8 Value for Carriage Declaration" CUT "^(.*)$"
+    *** TIP: we accept more 'no value' codes than formally specified
+    --- cooool trick: the Value element is generated only once! but either from a Mark, xor an explicit element
+||||D  "(NVD|nvd|0+|XXX|NDV)" SKIP        C 0 1 ACC 1   COND ValueDeclared1 "ZERO" "FWB-11.8 Value for Carriage Declaration" ASMATCHED
+||||D  "(.*)"              Value          O 0 1 ACC 1   R W "FWB-11.8 Value for Carriage Declaration" NUMERIC [1..12]
+||||MARK                   Value          COND ValueDeclared1 "ZERO" "0" "NULL"
+||||MARK                   @Qualifier     COND ValueDeclared1 "ZERO" "NO_VALUE" "NULL"
+|||SEG ""                Customs          O 1 1 ACC 1   R W "FWB-11.10 Value for Customs Declaration" CUT "^(.*)$"
+||||D  "(NCV|ncv|0+|NVD|XXX|NDV)" SKIP    C 0 1 ACC 1   COND ValueDeclared2 "ZERO" "FWB-11.10 Value for Customs Declaration" ASMATCHED
+||||D  "(.*)"              Value          O 0 1 ACC 1   R W "FWB-11.10 Value for Customs Declaration" NUMERIC [1..12]
+||||MARK                   Value          COND ValueDeclared2 "ZERO" "0" "NULL"
+||||MARK                   @Qualifier     COND ValueDeclared2 "ZERO" "NO_VALUE" "NULL"
+|||SEG ""                Insurance        O 1 1 ACC 1   R W "FWB-11.11 Value for Insurance Declaration" CUT "^(.*)$"
+||||D  "(XXX|xxx|0+|NIV|NVD|NDV)" SKIP    C 0 1 ACC 1   COND ValueDeclared3 "ZERO" "FWB-11.11 Value for Insurance Declaration" ASMATCHED
+||||D  "(.*)"              Value          O 0 1 ACC 1   R W "FWB-11.11 Value for Insurance Declaration" NUMERIC [1..12]
+||||MARK                   Value          COND ValueDeclared3 "ZERO" "0" "NULL"
+||||MARK                   @Qualifier     COND ValueDeclared3 "ZERO" "NO_VALUE" "NULL"
+
+ ===== [12] Rate Description =====
+ 
+|GRP    "^RTD/"       Rate                  M 1 1 ACC 1   R W "FWB-12 Rate Description"
+
+    *** We match the 1st RTD line and all subsequent ones through the same set of structures below.
+    *** Rate detail structures are much screwy because that may be split over several message Lines in order to cater for waybill printing constraints
+    *** the subtle seg/grp assemblies below help restore a semantical structure from the print-like formats imposed by message specs
+    *** FIX? we only check roughly for max 12 occurences below; the specification bears strictier constraints that are not verified by this DEF
+||GRP   "^(RTD)?/\d{1,2}/[^N]" Detail       M 1 12 ACC 999 R W "FWB-12 Rate Description"
+|||SEG  "^(RTD)?/\d{1,2}/" NOTAG            M 1 1 ACC 1   R W "FWB-12 Rate Description" CUT "^(?:RTD)?/(\d{1,2})(/P[^/]+)?(/[KLP][^/]+)?(/C[^/]+)?(/S[^/]+)?(/W[^/]+)?(/R[^/]+)?(/T[^/]+)?(/N./.*?)?(/.)?$"
+||||D   "(\d{1,2})"        PrintLine        C 1 1 ACC 1   COND TotalRateLines "R" "FWB-12.2.2 AWB Rate Line Number" ASMATCHED
+||||D   "/P(.+)"           NbOfPieces       O 0 1 ACC 1   R W "FWB-12.3.3 Number of Pieces/RCP Details" DIGIT [1..4]
+||||SEG "^/[KL]"           GrossWeight      O 0 1 ACC 1   R W "FWB-12.4 Gross Weight Details" CUT "^/(.)(.*)$"
+|||||D  "(.)"                @Code          C 1 1 ACC 1   COND WeightCode2 "(.)" "FWB-12.4.2 Weight Code" UPALPHA
+|||||D  "(.*)"               Amount         M 1 1 ACC 1   R W "FWB-12.4.3 Weight" NUMERIC [1..7]
+|||||MARK                    @Unit          COND WeightCode2 "K" "KILOS" "NULL"
+|||||MARK                    @Unit          COND WeightCode2 "L" "POUNDS" "NULL"
+||||D   "/C(.+)"           RateClassCode    O 0 1 ACC 1   R W "FWB-12.5.3 Rate Class Code" UPALPHA [1..1]
+||||D   "/S(\d+)"          CommodityItemNb  O 0 1 ACC 1   R W "FWB-12.6.3a Commodity Item Number" ASMATCHED
+||||D   "/S(\d[A-Z]{0,2})" RateClassType    O 0 1 ACC 1   R W "FWB-12.6.3b (or) ULD Rate Class Type" ASMATCHED
+||||SEG "^/S[A-Z]\d*$"     RateClass        O 0 1 ACC 1   R W "FWB-12.6.3c (or) Rate Class Code Basis & percentage" CUT "^/S(.)(.*)$"
+|||||D  "(.)"                Basis          M 1 1 ACC 1   R W "FWB-12.6.3c1 Rate Class Code Basis" UPALPHA
+|||||D  "(.*)"               Percentage     O 0 1 ACC 1   R W "FWB-12.6.3c2 Class Rate Percentage" DIGIT [..3]
+||||D   "/W(.+)"           ChargeableWeight O 0 1 ACC 1   R W "FWB-12.7.3 (Chargeable Weight Details) Weight" NUMERIC [1..7]
+||||D   "/R(.+)"           RateOrChargeOrDiscount O 0 1 ACC 1 R W "FWB-12.8.3 (Rate/Charge Details) Rate or Charge or Discount" NUMERIC [1..8]
+||||D   "/T(.+)"           Total            O 0 1 ACC 1   R W "FWB-12.9.3 (Total Details) Charge Amount or Discount Amount" NUMERIC [1..12]
+
+    ******************** The following block caters for the repetition of FWB-12.11 to FWB-12.19 on separate 'waybill lines'
+    ******************** given that the structure of the FWB message is affected by printing requirements!!!
+|||GRP  "^(/\d{1,2})?/N./" Goods            O 0 1 ACC 999 R W "FWB-12.11to18 Nature and Quantity of Goods"
+
+||||SEG "^(/\d{1,2})?/N./"   NOTAG          O 0 12 ACC 999 R W "FWB-12.11to18 Nature and Quantity of Goods" CUT "^(/\d{1,2})?(/N./.*?)(/\D)?$"
+
+|||||D  "/(\d{1,2})"           PrintLine    C 0 1 ACC 1   COND TotalRateLines "L" "FWB-12.2.2 AWB Rate Line Number" ASMATCHED
+
+|||||D  "^/NG/(.*)"            Description  O 0 1 ACC 1   R W "FWB-12.11.5 Nature and Quantity of Goods" IATA [..20]
+
+|||||D  "^/NC/(.*)"            Consolidation O 0 1 ACC 1  R W "FWB-12.12.5 Consolidation" IATA [..20]
+
+|||||SEG "^/ND/"               Dimensions   O 0 1 ACC 1   R W "FWB-12.13 Dimensions" CUT "/[^/]*"
+||||||D  "(/ND)"                 SKIP       M 1 1 ACC 1   R W "FWB-12.13.3 Dimensions Identifier" ASMATCHED
+    *** Trick: the next group makes <Weight> nillable (is a segment, not a data element!) when Weight Details Not Provided
+||||||GRP    "^/"                NOTAG      M 1 1 ACC 1   R W "FWB-12.13.4to6 Weight Details"
+    *** TIP: it's easy to adjust the structure below to be more or less restrictive, e.g. accepting 'P' for POUNDS too but keeping a warning in the CONDition!
+|||||||SEG  "^/[A-Z][\d.,]+$"      Weight   O 0 1 ACC 1   R W "FWB-12.13.4to6 Weight Details" CUT "^/(.)(.*)$"
+||||||||D   "(.)"                   @Code   C 1 1 ACC 1   COND WeightCode3 "(.)" "FWB-12.13.5 Weight Code" UPALPHA
+||||||||D   "(.*)"                  Amount  M 1 1 ACC 1   R W "FWB-12.13.6 Weight" NUMERIC [1..7]
+    --- only one of the following marks will match the condition, thus mapping the code into a single Unit attribute
+||||||||MARK                        @Unit   COND WeightCode3 "K" "KILOS" "NULL"
+||||||||MARK                        @Unit   COND WeightCode3 "L" "POUNDS" "NULL"
+||||||||MARK                        @Unit   COND WeightCode3 "P" "POUNDS" "NULL"
+||||||||MARK                        @Unit   COND WeightCode3 "K|L|P" "NULL" "UNKNOWN_WEIGHT_CODE"
+|||||||D    "(/)"                  SKIP     O 0 1 ACC 1   R W "FWB-12.13.5t&6 Weight Details Not Provided" ASMATCHED
+    *** Measurement unit codes actually as 'aaa', are not checked
+    *** the segment CUT accepts an extra '-' next to Unit, although formally an error
+||||||SEG   "-"                  Measurements M 1 1 ACC 1 R W "FWB-12.13.7to13 Measurement Details" CUT "^/(...)-?(.*?)-(.*?)-(.*?)$"
+|||||||D    "(.*)"                 @Unit    M 1 1 ACC 1   R W "FWB-12.13.8 Measurement Unit Code" UPALPHA
+|||||||D    "(.*)"                 Length   M 1 1 ACC 1   R W "FWB-12.13.9 Length Dimension" DIGIT [1..5]
+|||||||D    "(.*)"                 Width    M 1 1 ACC 1   R W "FWB-12.13.11 Width Dimension" DIGIT [1..5]
+|||||||D    "(.*)"                 Height   M 1 1 ACC 1   R W "FWB-12.13.13 Height Dimension" DIGIT [1..5]
+    ***
+||||||D     "/(.*)"              Pieces     M 1 1 ACC 1   R W "FWB-12.13.15 Number of Pieces" DIGIT [1..4]
+
+|||||SEG    "^/NV/"            Volume       O 0 1 ACC 1   R W "FWB-12.14 Volume" CUT "^/NV/(..)(.*)$"
+||||||D     "(..)"               @Code      C 1 1 ACC 1   COND VolumeCode2 "(..)" "FWB-12.14.5 Volume Code" UPALPHA
+||||||D     "(.*)"               Amount     M 1 1 ACC 1   R W "FWB-12.14.6 Volume Amount" NUMERIC [1..9]
+    --- only one of the following marks will match the condition, thus mapping the code into a single Unit attribute
+||||||MARK                       @Unit      COND VolumeCode2 "CC" "CUBIC_CENTIMETRES" "NULL"
+||||||MARK                       @Unit      COND VolumeCode2 "CF" "CUBIC_FEET" "NULL"
+||||||MARK                       @Unit      COND VolumeCode2 "CI" "CUBIC_INCHES" "NULL"
+||||||MARK                       @Unit      COND VolumeCode2 "MC" "CUBIC_METRES" "NULL"
+||||||MARK                       @Unit      COND VolumeCode2 "CC|CF|CI|MC" "NULL" "UNKNOWN_VOLUME_CODE"
+
+|||||SEG   "^/NU/"             ULD          O 0 1 ACC 1   R W "FWB-12.15 ULD Number" CUT "^/NU/(...)(....\d?)(..\D?)$"
+||||||D    "(.*)"                Type       M 1 1 ACC 1   R W "FWB-12.15.5 ULD Type" UPALPHANUM
+||||||D    "(.*)"                SerialNb   M 1 1 ACC 1   R W "FWB-12.15.6 ULD Serial Number" UPALPHANUM
+||||||D    "(.*)"                Owner      M 1 1 ACC 1   R W "FWB-12.15.7 ULD Owner Code" UPALPHANUM
+
+|||||D     "^/NS/(.*)"         ShippersCount O 0 1 ACC 1  R W "FWB-12.16.5 Shipper's Load and Count (SLAC)" DIGIT [1..5]
+
+|||||D     "^/NH/(.*)"         HarmonisedCommodityCode O 0 1 ACC 1 R W "FWB-12.17.5 Harmonised Commodity Code" UPALPHANUM [6..18]
+
+|||||D     "^/NO/(.*)"         CountryOfOrigin O 0 1 ACC 1 R W "FWB-12.18.5 ISO Country Code" UPALPHA [2..2]
+
+    *** Service Codes as 'a' are not checked (data element 505, code list 1.38)
+|||||D     "/(.)"              ServiceCode  O 0 1 ACC 1   R W "FWB-12.19.2 Service Code" UPALPHA
+
+    ******************** END of the repetition of the FWB-12.11 to FWB-12.19 as Goods description lines on the print-like waybill!!!
+
+ ===== [13] Other Charges =====
+|GRP    "^OTH"       OtherCharges           C 0 1 ACC 1   COND OTHGroup "G" "FWB-13 Other Charges - Group"
+    *** we match the 1st OTH line and all subsequent ones through the same structure below
+    *** so that we can also easily accept more lines, yet raise warnings according to the CONDition
+||SEG   "^(OTH)?/"     Charge               M 1 2 ACC 999 R W "FWB-13 Other Charges" CUT-ON-(/)
+|||D    "(OTH|)"         SKIP               C 1 1 ACC 1   COND OTHGroup "(.).*" "FWB-13.1 OTH Line Identifier" ASMATCHED
+|||D    "(.*)"           @Code              C 1 1 ACC 1   COND PrepaidCollectQ "(.*)" "FWB-13.2.2 Prepaid/Collect Indicator" ASMATCHED
+|||MARK                  @Qualifier         COND PrepaidCollectQ "P" "PREPAID" "NULL"
+|||MARK                  @Qualifier         COND PrepaidCollectQ "C" "COLLECT" "NULL"
+|||MARK                  @Qualifier         COND PrepaidCollectQ "C|P" "NULL" "INVALID_PREPAID_COLLECT_INDICATOR"
+|||SEG  ""               NOTAG              M 1 1 ACC 1   R W "FWB-13.3 Other Charge Items" CUT "([A-Za-z]{3,3}[\d.,]*)"
+||||SEG ""                 Item             C 1 3 ACC 99  COND OTHGroup "I" "FWB-13.3 Other Charge Items" CUT "^(..)(.)(.*)$"
+|||||D  "(..)"               ChargeCode     M 1 1 ACC 1   R W "FWB-13.3.1 Other Charge Code" UPALPHA
+|||||D  "(.)"                EntitlementCode M 1 1 ACC 1  R W "FWB-13.3.2 Entitlement Code" UPALPHA
+|||||D  "(.*)"               Amount         M 1 1 ACC 1   R W "FWB-13.3.3 Charge Amount" NUMERIC [1..12]
+
+ ***** [14&15] Prepaid/Collect Charge Summary *****
+|GRP    "(^PPD)|(^COL)" Summary             C 0 1 ACC 1   COND PPDCOLGroup "S" "FWB-14&15 Prepaid/Collect Charge Summary"
+
+ ===== [14] Prepaid Charge Summary =====
+||GRP   "^PPD"         Prepaid              C 0 1 ACC 1   COND PPDCOLGroup "P" "FWB-14 Prepaid Charge Summary"
+    *** it's a collection of sub-segments over 2 lines (formally always 2) that we parse globally with one SEG def below
+|||SEG  "(^PPD/.+$)|(^PPD$)|(^/.+$)" NOTAG  M 2 2 ACC 6   R W "FWB-14 Prepaid Charge Summary" CUT-ON-(/)
+||||D   "(PPD|)"           SKIP             O 0 1 ACC 1   R W "FWB-14.1 PPD Line Identifier" ASMATCHED
+||||D   "WT(.*)"           TotalWeightCharge O 0 1 ACC 1  R W "FWB-14.2 Total Weight Charge" NUMERIC [1..12]
+||||D   "VC(.*)"           ValuationCharge  O 0 1 ACC 1   R W "FWB-14.3 Valuation Charge" NUMERIC [1..12]
+||||D   "TX(.*)"           Taxes            O 0 1 ACC 1   R W "FWB-14.4 Taxes" NUMERIC [1..12]
+||||D   "OA(.*)"           DueAgent         O 0 1 ACC 1   R W "FWB-14.6 Total Other Charges Due Agent" NUMERIC [1..12]
+||||D   "OC(.*)"           DueCarrier       O 0 1 ACC 1   R W "FWB-14.7 Total Other Charges Due Carrier" NUMERIC [1..12]
+||||D   "CT(.*)"           Total            C 0 1 ACC 1   COND PPDCOLGroup "T" "FWB-14.8 Charge Summary Total" NUMERIC [1..12]
+
+ ===== [15] Collect Charge Summary =====
+||GRP   "^COL"         Collect              C 0 1 ACC 1   COND PPDCOLGroup "C" "FWB-15 Collect Charge Summary"
+    *** it's a collection of sub-segments over 2 lines (formally always 2) that we parse globally with one SEG def below
+|||SEG  "(^COL/.+$)|(^COL$)|(^/.+$)" NOTAG  M 2 2 ACC 6   R W "FWB-15 Collect Charge Summary" CUT-ON-(/)
+||||D   "(COL|)"           SKIP             O 0 1 ACC 1   R W "FWB-15.1 COL Line Identifier" ASMATCHED
+||||D   "WT(.*)"           TotalWeightCharge O 0 1 ACC 1  R W "FWB-15.2 Total Weight Charge" NUMERIC [1..12]
+||||D   "VC(.*)"           ValuationCharge  O 0 1 ACC 1   R W "FWB-15.3 Valuation Charge" NUMERIC [1..12]
+||||D   "TX(.*)"           Taxes            O 0 1 ACC 1   R W "FWB-15.4 Taxes" NUMERIC [1..12]
+||||D   "OA(.*)"           DueAgent         O 0 1 ACC 1   R W "FWB-15.6 Total Other Charges Due Agent" NUMERIC [1..12]
+||||D   "OC(.*)"           DueCarrier       O 0 1 ACC 1   R W "FWB-15.7 Total Other Charges Due Carrier" NUMERIC [1..12]
+||||D   "CT(.*)"           Total            C 0 1 ACC 1   COND PPDCOLGroup "T" "FWB-15.8 Charge Summary Total" NUMERIC [1..12]
+
+ ===== [16] Shipper's Certification =====
+|D      "CER/(.*)"   ShipperSignature       O 0 1 ACC 1   R W "FWM-16.3 Shipper's Certification Signature" IATA [1..20]
+
+ ===== [17] Carrier's Execution =====
+|SEG    "^ISU/"      IssuedByCarrier        O 1 1 ACC 1   R W "FWB-17 Carrier's Execution" CUT-ON-(/)
+    *** date formatting is much relaxed below to accept data like "3" "3MAR" "03MAR08" "03MAR2008" "3MARCH"
+||D     "(ISU)"        SKIP                 M 1 1 ACC 1   R W "FWB-17.1 ISU Line Identifier" ASMATCHED
+||SEG   ""             Date                 M 1 1 ACC 1   R W "FWB-17.2 AWB Issue Details" CUT "(\d\d?)(?:(\D+)(\d*)?)?"
+|||D    "(.*)"           Day                M 1 1 ACC 1   R W "FWB-17.2.2 Day" DIGIT [2..2]
+|||D    "(.*)"           Month              O 1 1 ACC 1   R W "FWB-17.2.3 Month" UPALPHA [3..3]
+|||D    "(.*)"           Year               O 1 1 ACC 1   R W "FWB-17.2.4 Year" DIGIT [2..2]
+||D     "(.*)"         Place                M 1 1 ACC 1   R W "FWB-17.2.6 Place or Airport/City Code" IATA [1..17]
+||D     "(.*)"         Signature            O 0 1 ACC 1   R W "FWB-17.3.2 Authorisation - Signature" IATA [1..20]
+
+ ===== [18] Other Service Information =====
+|GRP    "^OSI"       OtherService           C 0 1 ACC 1   COND OSIGroup "G" "FWB-18 Other Service Information - Group"
+    *** we match the 1st OSI line and all subsequent ones through the same structure below
+    *** so that we can also easily accept more lines, yet raise warnings according to the CONDition
+||SEG   "^(OSI)?/"     NOTAG                M 1 999 ACC 999 R W "FWB-18 Other Service Information" CUT-ON-(/)
+|||D    "(OSI|)"         SKIP               C 1 1 ACC 1   COND OSIGroup "(.).*" "FWB-18.1 OSI Line Identifier" ASMATCHED
+|||D    "(.*)"           Info               C 1 1 ACC 10  COND OSIGroup "T" "FWB-18.3 Other Service Information" IATA [..65]
+
+ ===== [19] CC Charges in Destination Currency =====
+|SEG    "^CDC/"      ConvertedCharges       O 0 1 ACC 1   R W "FWB-19 CC Charges in Destination Currency" CUT-ON-(/)
+||D     "(CDC)"        SKIP                 M 1 1 ACC 1   R W "FWB-19.1 CDC Line Identifier" ASMATCHED
+||SEG   ""             NOTAG                M 1 1 ACC 1   R W "FWB-19.3&4 Destination Currency and Conversion Rate" CUT "^(...)(.*)$"
+|||D    "(...)"          DestinationCurrency M 1 1 ACC 1  R W "FWB-19.3.1 ISO Currency Code" UPALPHA
+|||D    "(.*)"           ExchangeRate       M 1 1 ACC 1   R W "FWB-19.4.1 Rate of Exchange" NUMERIC [1..11]
+||D     "(.*)"         CCCharges            M 1 1 ACC 1   R W "FWB-19.6 CC Charges in Destination Currency" NUMERIC [1..12]
+||D     "(.*)"         ChargesAtDestination O 1 1 ACC 1   R W "FWB-19.8 Charges at Destination" NUMERIC [1..12]
+||D     "(.*)"         TotalCollectCharges  O 1 1 ACC 1   R W "FWB-19.8 Total Collect Charges" NUMERIC [1..12]
+
+ ===== [20] Sender Reference =====
+|SEG    "^REF"       SenderReference        O 1 1 ACC 1   R W "FWB-20 Sender Reference" CUT "^REF/([^/]*)(?:/([^/]*)(?:/(.*))?)?$"
+||SEG   ""             Office               O 0 1 ACC 1   R W "FWB-20.3 Sender Office Message Address" CUT "^(.*)$"
+|||D    "(.+)"           IATAAddress        C 0 1 ACC 1   COND OneSenderID "S" "FWB-20.3 Sender Office Message Address" UPALPHANUM [7..8]
+|||D    "()"             SKIP               O 0 1 ACC 1   R W "FWB-20.3 Sender Office Message Address" ASMATCHED
+||D     "(.*)"         File                 O 0 1 ACC 1   R W "FWB-20.5 Sender Office File Reference" IATA [1..15]
+||SEG   ""             Participant          O 0 1 ACC 1   R W "FWB-20.6 Sender Participant Identification" CUT-ON-(/)
+|||D    "(.*)"           Identifier         C 1 1 ACC 1   COND OneSenderID "S" "FWB-20.6.2 Participant Identifier" UPALPHANUM [1..3]
+|||D    "(.*)"           Code               M 1 1 ACC 1   R W "FWB-20.6.4 Participant Code" UPALPHANUM [1..17]
+|||D    "(.*)"           Location           M 1 1 ACC 1   R W "FWB-20.6.6 Airport/City Code" UPALPHA [3..3]
+
+ ===== [21] Customs Origin =====
+|D      "COR/(.*)"   CustomsOrigin          O 0 1 ACC 1   R W "FWM-21.3 Customs Origin Code" UPALPHANUM [2..2]
+
+ ===== [22] Commission Information =====
+|SEG    "^COI/"      Commission             O 0 1 ACC 1   R W "FWB-22 Commission Information" CUT-ON-(/)
+||D     "(COI)"        SKIP                 M 1 1 ACC 1   R W "FWB-22.1 COI Line Identifier" ASMATCHED
+    *** FIX? next element could possibly only mean NoCommission (only value "N" allowed)
+||D     "(.*)"         Indicator            C 0 1 ACC 1   COND CommissionInfo "I" "FWB-22.3.1 CASS Indicator" ALPHA [1..2]
+||D     "(.*)"         Amount               C 0 1 ACC 1   COND CommissionInfo "A" "FWB-22.5.1 Commission Amount - CASS Settlement Factor" NUMERIC [1..12]
+||D     "(.*)"         Percentage           C 0 1 ACC 1   COND CommissionInfo "P" "FWB-22.7.1 Commission Percentage - CASS Settlement Factor" NUMERIC [1..12]
+
+ ===== [23] Sales Incentive =====
+|SEG    "^SII/"      Incentive              O 0 1 ACC 1   R W "FWB-23 Sales Incentive" CUT-ON-(/)
+||D     "(SII)"        SKIP                 M 1 1 ACC 1   R W "FWB-23.1 SII Line Identifier" ASMATCHED
+||D     "(.*)"         Amount               O 1 1 ACC 1   R W "FWB-23.3 Sales Incentive Amount" NUMERIC [1..12]
+||D     "(.*)"         Indicator            O 0 1 ACC 1   R W "FWB-23.5 CASS Indicator" ALPHA [1..2]
+
+ ===== [24] Agent Reference Data =====
+|D      "ARD/(.*)"   AgentReference         O 0 1 ACC 1   R W "FWM-24.3 Agent File Reference" IATA[1..15]
+
+ ===== [25] Special Handling Details =====
+|SEG    "^SPH/"      SpecialHandling        O 0 1 ACC 1   R W "FWB-25 Special Handling Details" CUT-ON-(/)
+||D     "(SPH)"        SKIP                 M 1 1 ACC 1   R W "FWB-25.1 SPH Line Identifier" ASMATCHED
+||D     "(.*)"         HandlingCode         M 1 9 ACC 20  R W "FWB-25.2 Special Handling Code" UPALPHA [3..3]
+
+ ===== [26] Nominated Handling Party =====
+|SEG    "^NOM/"      HandlingParty          O 0 1 ACC 1   R W "FWB-26 Nominated Handling Party" CUT-ON-(/)
+||D     "(NOM)"        SKIP                 M 1 1 ACC 1   R W "FWB-26.1 NOM Line Identifier" ASMATCHED
+||D     "(.*)"         Name                 O 1 1 ACC 1   R W "FWB-26.3 Name" IATA [1..35]
+||D     "(.*)"         Place                O 1 1 ACC 1   R W "FWB-26.5 Place" IATA [1..17]
+
+ ===== [27] Shipment Reference Information =====
+|SEG    "^SRI/"      ShipmentReference      C 0 1 ACC 1   COND SRIinfo "S" "FWB-27 Shipment Reference Information" CUT-ON-(/)
+||D     "(SRI)"        SKIP                 M 1 1 ACC 1   R W "FWB-27.1 SRI Line Identifier" ASMATCHED
+||D     "(.*)"         ReferenceNb          C 0 1 ACC 1   COND SRIinfo "N" "FWB-27.3 Reference Number" IATA [1..14]
+||D     "(.*)"         SupplementaryInfo    C 0 2 ACC 9   COND SRIinfo "I" "FWB-27.3 Reference Number" IATA [1..12]
+
+ ===== [28] Other Participant Information =====
+|GRP    "^OPI"       OtherParticipant       O 0 2 ACC 999 R W "FWB-28 Other Participant Information"
+||D     "OPI/(.*)"     Name                 M 1 1 ACC 1   R W "FWB-28.3 Name" IATA [..35]
+||SEG   "^/"           NOTAG                O 1 1 ACC 1   R W "FWB-28.5 Other Participant Information - second line" CUT "^/([^/]*)(?:/([^/]*)(?:/(.*))?)?$"
+|||SEG  ""               Office             O 0 1 ACC 1   R W "FWB-28.6 Other Participant Office Message Address" CUT "^(.*)$"
+||||D   "(.+)"             IATAAddress      C 0 1 ACC 1   COND OneOtherID "P" "FWB-28.6 Other Participant Office Message Address" UPALPHANUM [7..8]
+||||D   "()"               SKIP             O 0 1 ACC 1   R W "FWB-28.6 Other Participant Office Message Address" ASMATCHED
+|||D    "(.*)"           File               O 0 1 ACC 1   R W "FWB-28.8 Other Participant Office File Reference" IATA [1..15]
+|||SEG  ""               Participant        O 0 1 ACC 1   R W "FWB-28.9 Other Participant Identification" CUT-ON-(/)
+||||D   "(.*)"             Identifier       C 1 1 ACC 1   COND OneOtherID "P" "FWB-28.9.2 Participant Identifier" UPALPHANUM [1..3]
+||||D   "(.*)"             Code             M 1 1 ACC 1   R W "FWB-28.9.4 Participant Code" UPALPHANUM [1..17]
+||||D   "(.*)"             Location         M 1 1 ACC 1   R W "FWB-28.9.6 Airport/City Code" UPALPHA [3..3]
+
+ ===== [29] Other Customs Information =====
+|GRP    "^OCI"       CustomsInformation     C 0 1 ACC 1   COND OCIGroup "G" "FWB-29 Other Customs Information - Group"
+    *** we match the 1st OCI line and all subsequent ones through the same structure below
+    *** so that we can also easily accept more lines, yet raise warnings according to the CONDition
+||SEG   "^(OCI)?/"     Supplementary        M 1 2 ACC 999 R W "FWB-29 Other Customs Information" CUT-ON-(/)
+|||D    "(OCI|)"         SKIP               C 1 1 ACC 1   COND OCIGroup "(.).*" "FWB-29.1 OCI Line Identifier" ASMATCHED
+|||D    "(.*)"           CountryCode        O 1 1 ACC 1   R W "FWB-29.3 ISO Country Code" UPALPHA [2..2]
+|||D    "(.*)"           InfoID             O 1 1 ACC 1   R W "FWB-29.5 Information Identifier" UPALPHA [1..3]
+|||D    "(.*)"           CustomsID          O 1 1 ACC 1   R W "FWB-29.7 Customs Information Identifier" UPALPHA [1..1]
+|||D    "(.*)"           Info               C 1 1 ACC 1   COND OCIGroup "I" "FWB-29.9 Supplementary Customs Information" IATA [1..35]
+
+ ===== Eating trailing lines =====
+ *** DISABLED!!!  (suppress leading space to reactivate)
+ |D     "(.*)"        TrailingLines          O 0 99 ACC 999 R W "FWB-T Trailing Data" ASMATCHED
+
+END
+
+************** ************** ************** ************** ************** **************
+Next to the very END of the definition, everyting is ignored by the Parser.
+So this is the right place for additional documentation.
+************** ************** ************** ************** ************** **************
+
+This is the documentation generated by the Paser, using
+'java -cp "ReverseXSL.jar;." com.reverseXSL.Parse FWB15.def'
+
+<?xml version="1.0" encoding="UTF-8"?>
+<FWB xmlns="http://www.HelloWorld.com" messageID="sample2009-4-29">
+   <TypeBHeader Priority="TypeB-P TypeB Header - Priority Indicator">
+      <SKIP>{0..1} SITA-ZC Optional SITA network legacy message framing, ignored</SKIP>
+      <Recipient>{1..8} TypeB-R TypeB Header - IATA Recipient</Recipient>
+      <CopyTo>
+         <SKIP>{1..1} TypeB-G2dotS Type-B 2nd Recipient block - dummy sender line prefix</SKIP>
+         <SKIP>{0..1} TypeB-G2P Type-B 2nd Recipient block - Priority Indicator, ignored</SKIP>
+         <Recipient>{1..8} TypeB-G2R Type-B 2nd Recipient block - IATA Recipient</Recipient>
+      </CopyTo>
+      <Sender>{1..1} TypeB-S TypeB Header - IATA Sender</Sender>
+      <DoubleSignature>{0..1} TypeB-DS TypeB Header - Double Signature (Billing-to)</DoubleSignature>
+      <Date>
+         <Day>{1..1} TypeB-DD TypeB Header - Date - Day DD</Day>
+         <HH>{1..1} TypeB-HH TypeB Header - Date - Hour HH</HH>
+         <MM>{1..1} TypeB-MM TypeB Header - Date - Minutes MM</MM>
+      </Date>
+      <References>{0..1} TypeB-REF TypeB Header - Sender References - unparsed</References>
+      <RAW>{0..0} FWB-- Garbage lines prefixed to the standard message</RAW>
+   </TypeBHeader>
+   <Type>{1..1} FWB-1.1 Standard Message Identifier</Type>
+   <Version>{1..1} FWB-1.3 Message Type Version</Version>
+   <Consignment>
+      <AWB>
+         <Airline>{1..1} FWB-2.1.1 Airline Prefix</Airline>
+         <SerialNb>{1..1} FWB-2.1.3 AWB Serial Number</SerialNb>
+      </AWB>
+      <Origin>{1..1} FWB-2.2.1 Airport/City Code of Origin</Origin>
+      <Destination>{1..1} FWB-2.2.2 Airport/City Code of Destination</Destination>
+      <Shipped Code="FWB-2.3.2 Shipment Description Code" Qualifier="ShipCode1.matches(T)? TOTAL : INVALID_SHIPMENT_CODE">
+         <Pieces>{1..1} FWB-2.3.3 Number of Pieces</Pieces>
+      </Shipped>
+      <Weight Code="FWB-2.3.4 Weight Code" Unit="WeightCode1.matches(K|L|P)? NULL : UNKNOWN_WEIGHT_CODE">
+         <Amount>{1..1} FWB-2.3.5 Weight</Amount>
+      </Weight>
+      <Density>
+         <SKIP>{1..1} FWB-2.5.1 Density Indicator</SKIP>
+         <Group>{1..1} FWB-2.5.2 Density Group</Group>
+      </Density>
+      <Volume Code="FWB-2.4.1 Volume Code" Unit="VolumeCode1.matches(CC|CF|CI|MC)? NULL : UNKNOWN_VOLUME_CODE">
+         <Amount>{1..1} FWB-2.4.2 Volume Amount</Amount>
+      </Volume>
+   </Consignment>
+   <Bookings>
+      <SKIP>{1..1} FWB-3.1 FLT Line Identifier</SKIP>
+      <Flight>
+         <Carrier>{1..1} FWB-3.2.2 Carrier Code</Carrier>
+         <Number>{1..1} FWB-3.2.3 Flight Number</Number>
+         <Day>{1..1} FWB-3.2.5 Day</Day>
+      </Flight>
+   </Bookings>
+   <Routing>
+      <SKIP>{1..1} FWB-4.1 RTG Line Identifier</SKIP>
+      <First>
+         <Destination>{0..1} FWB-4.2.2 Airport/City code</Destination>
+         <Carrier>{1..1} FWB-4.2.3 Carrier Code</Carrier>
+      </First>
+      <Onward>
+         <Destination>{1..1} FWB-4.3.2 Airport/City code</Destination>
+         <Carrier>{0..1} FWB-4.3.3 Carrier Code</Carrier>
+      </Onward>
+   </Routing>
+   <Shipper>
+      <SKIP>{1..1} FWB-5.1 SHP Line Identifier</SKIP>
+      <AccountNb>{0..1} FWB-5.2.2 Account Number</AccountNb>
+      <Name>{1..1} FWB-5.4 Name</Name>
+      <Street>{1..1} FWB-5.5 Street Address</Street>
+      <Place>{1..1} FWB-5.6.2 Place</Place>
+      <StateOrProvince>{0..1} FWB-5.6.4 State/Province</StateOrProvince>
+      <Country>{1..1} FWB-5.7.2 ISO Country Code</Country>
+      <PostCode>{0..1} FWB-5.7.4 Post Code</PostCode>
+      <Contact Code="FWB-5.8.2 Contact Identifier" Qualifier="ContactCode1.matches(TE|TL|FX)? NULL : UNKNOWN_CONTACT_CODE">
+         <Number>{1..1} FWB-5.8.4 Contact Number</Number>
+      </Contact>
+   </Shipper>
+   <Consignee>
+      <SKIP>{1..1} FWB-6.1 CNE Line Identifier</SKIP>
+      <AccountNb>{0..1} FWB-6.2.2 Account Number</AccountNb>
+      <Name>{1..1} FWB-6.4 Name</Name>
+      <Street>{1..1} FWB-6.5 Street Address</Street>
+      <Place>{1..1} FWB-6.6.2 Place</Place>
+      <StateOrProvince>{0..1} FWB-6.6.4 State/Province</StateOrProvince>
+      <Country>{1..1} FWB-6.7.2 ISO Country Code</Country>
+      <PostCode>{0..1} FWB-6.7.4 Post Code</PostCode>
+      <Contact Code="FWB-6.8.2 Contact Identifier" Qualifier="ContactCode2.matches(TE|TL|FX)? NULL : UNKNOWN_CONTACT_CODE">
+         <Number>{1..1} FWB-6.8.4 Contact Number</Number>
+      </Contact>
+   </Consignee>
+   <Agent>
+      <SKIP>{1..1} FWB-7.1 AGT Line Identifier</SKIP>
+      <AccountNb>{0..1} FWB-7.2.2 Account Number</AccountNb>
+      <IATANumericCode>{1..1} FWB-7.2.4 IATA Cargo Agent Numeric Code</IATANumericCode>
+      <IATACASSAddress>{0..1} FWB-7.2.6 IATA Cargo Agent CASS Address</IATACASSAddress>
+      <ParticipantID>{0..1} FWB-7.2.8 Participant Identifier</ParticipantID>
+      <Name>{1..1} FWB-7.4.2 Name</Name>
+      <Place>{1..1} FWB-7.5.2 Place</Place>
+   </Agent>
+   <SpecialService>
+      <SKIP>{1..1} FWB-8.1 SSR Line Identifier</SKIP>
+      <Request>{1..1} FWB-8.3 Special Service Request</Request>
+   </SpecialService>
+   <AlsoNotify>
+      <SKIP>{1..1} FWB-9.1 NFY Line Identifier</SKIP>
+      <Name>{1..1} FWB-9.2.2 Name</Name>
+      <Street>{1..1} FWB-9.3 Street Address</Street>
+      <Place>{1..1} FWB-9.4.2 Place</Place>
+      <StateOrProvince>{0..1} FWB-9.4.4 State/Province</StateOrProvince>
+      <Country>{1..1} FWB-9.5.2 ISO Country Code</Country>
+      <PostCode>{0..1} FWB-9.5.4 Post Code</PostCode>
+      <Contact Code="FWB-9.6.2 Contact Identifier" Qualifier="ContactCode3.matches(TE|TL|FX)? NULL : UNKNOWN_CONTACT_CODE">
+         <Number>{1..1} FWB-9.6.4 Contact Number</Number>
+      </Contact>
+   </AlsoNotify>
+   <Accounting>
+      <Detail Code="FWB-10.2.2 Accounting Information Identifier" Qualifier="AccntInfoCode.matches(CRN|CRD|CRI|GEN|GBL|MCO|STL|RET|SRN)? NULL : UNKNOWN_ACCOUNT_INFO_IDENTIFIER">
+         <SKIP>{1..1} FWB-10.1 ACC Line Identifier</SKIP>
+         <Information>{1..1} FWB-10.2.4 Accounting Information</Information>
+      </Detail>
+   </Accounting>
+   <Charge>
+      <SKIP>{1..1} FWB-11.1 CVD Line Identifier</SKIP>
+      <Currency>{1..1} FWB-11.3 ISO Currency Code</Currency>
+      <Charges Code="FWB-11.5 Charge Code">
+         <SKIP>{0..1} FWB-11.7 Prepaid/Collect Charge Declarations</SKIP>
+         <WeightAndValuation>PrepaidCollect.matches(P.)? PREPAID : COLLECT</WeightAndValuation>
+         <OtherCharges>PrepaidCollect.matches(.P)? PREPAID : COLLECT</OtherCharges>
+      </Charges>
+      <Declarations>
+         <Carriage Qualifier="ValueDeclared1.matches(ZERO)? NO_VALUE : NULL">
+            <SKIP>{0..1} FWB-11.8 Value for Carriage Declaration</SKIP>
+            <Value>{0..1} FWB-11.8 Value for Carriage Declaration</Value>
+            <Value>ValueDeclared1.matches(ZERO)? 0 : NULL</Value>
+         </Carriage>
+         <Customs Qualifier="ValueDeclared2.matches(ZERO)? NO_VALUE : NULL">
+            <SKIP>{0..1} FWB-11.10 Value for Customs Declaration</SKIP>
+            <Value>{0..1} FWB-11.10 Value for Customs Declaration</Value>
+            <Value>ValueDeclared2.matches(ZERO)? 0 : NULL</Value>
+         </Customs>
+         <Insurance Qualifier="ValueDeclared3.matches(ZERO)? NO_VALUE : NULL">
+            <SKIP>{0..1} FWB-11.11 Value for Insurance Declaration</SKIP>
+            <Value>{0..1} FWB-11.11 Value for Insurance Declaration</Value>
+            <Value>ValueDeclared3.matches(ZERO)? 0 : NULL</Value>
+         </Insurance>
+      </Declarations>
+   </Charge>
+   <Rate>
+      <Detail>
+         <PrintLine>{1..1} FWB-12.2.2 AWB Rate Line Number</PrintLine>
+         <NbOfPieces>{0..1} FWB-12.3.3 Number of Pieces/RCP Details</NbOfPieces>
+         <GrossWeight Code="FWB-12.4.2 Weight Code" Unit="WeightCode2.matches(L)? POUNDS : NULL">
+            <Amount>{1..1} FWB-12.4.3 Weight</Amount>
+         </GrossWeight>
+         <RateClassCode>{0..1} FWB-12.5.3 Rate Class Code</RateClassCode>
+         <CommodityItemNb>{0..1} FWB-12.6.3a Commodity Item Number</CommodityItemNb>
+         <RateClassType>{0..1} FWB-12.6.3b (or) ULD Rate Class Type</RateClassType>
+         <RateClass>
+            <Basis>{1..1} FWB-12.6.3c1 Rate Class Code Basis</Basis>
+            <Percentage>{0..1} FWB-12.6.3c2 Class Rate Percentage</Percentage>
+         </RateClass>
+         <ChargeableWeight>{0..1} FWB-12.7.3 (Chargeable Weight Details) Weight</ChargeableWeight>
+         <RateOrChargeOrDiscount>{0..1} FWB-12.8.3 (Rate/Charge Details) Rate or Charge or Discount</RateOrChargeOrDiscount>
+         <Total>{0..1} FWB-12.9.3 (Total Details) Charge Amount or Discount Amount</Total>
+         <Goods>
+            <PrintLine>{0..1} FWB-12.2.2 AWB Rate Line Number</PrintLine>
+            <Description>{0..1} FWB-12.11.5 Nature and Quantity of Goods</Description>
+            <Consolidation>{0..1} FWB-12.12.5 Consolidation</Consolidation>
+            <Dimensions>
+               <SKIP>{1..1} FWB-12.13.3 Dimensions Identifier</SKIP>
+               <Weight Code="FWB-12.13.5 Weight Code" Unit="WeightCode3.matches(K|L|P)? NULL : UNKNOWN_WEIGHT_CODE">
+                  <Amount>{1..1} FWB-12.13.6 Weight</Amount>
+               </Weight>
+               <SKIP>{0..1} FWB-12.13.5t&amp;6 Weight Details Not Provided</SKIP>
+               <Measurements Unit="FWB-12.13.8 Measurement Unit Code">
+                  <Length>{1..1} FWB-12.13.9 Length Dimension</Length>
+                  <Width>{1..1} FWB-12.13.11 Width Dimension</Width>
+                  <Height>{1..1} FWB-12.13.13 Height Dimension</Height>
+               </Measurements>
+               <Pieces>{1..1} FWB-12.13.15 Number of Pieces</Pieces>
+            </Dimensions>
+            <Volume Code="FWB-12.14.5 Volume Code" Unit="VolumeCode2.matches(CC|CF|CI|MC)? NULL : UNKNOWN_VOLUME_CODE">
+               <Amount>{1..1} FWB-12.14.6 Volume Amount</Amount>
+            </Volume>
+            <ULD>
+               <Type>{1..1} FWB-12.15.5 ULD Type</Type>
+               <SerialNb>{1..1} FWB-12.15.6 ULD Serial Number</SerialNb>
+               <Owner>{1..1} FWB-12.15.7 ULD Owner Code</Owner>
+            </ULD>
+            <ShippersCount>{0..1} FWB-12.16.5 Shipper's Load and Count (SLAC)</ShippersCount>
+            <HarmonisedCommodityCode>{0..1} FWB-12.17.5 Harmonised Commodity Code</HarmonisedCommodityCode>
+            <CountryOfOrigin>{0..1} FWB-12.18.5 ISO Country Code</CountryOfOrigin>
+            <ServiceCode>{0..1} FWB-12.19.2 Service Code</ServiceCode>
+         </Goods>
+      </Detail>
+   </Rate>
+   <OtherCharges>
+      <Charge Code="FWB-13.2.2 Prepaid/Collect Indicator" Qualifier="PrepaidCollectQ.matches(C|P)? NULL : INVALID_PREPAID_COLLECT_INDICATOR">
+         <SKIP>{1..1} FWB-13.1 OTH Line Identifier</SKIP>
+         <Item>
+            <ChargeCode>{1..1} FWB-13.3.1 Other Charge Code</ChargeCode>
+            <EntitlementCode>{1..1} FWB-13.3.2 Entitlement Code</EntitlementCode>
+            <Amount>{1..1} FWB-13.3.3 Charge Amount</Amount>
+         </Item>
+      </Charge>
+   </OtherCharges>
+   <Summary>
+      <Prepaid>
+         <SKIP>{0..1} FWB-14.1 PPD Line Identifier</SKIP>
+         <TotalWeightCharge>{0..1} FWB-14.2 Total Weight Charge</TotalWeightCharge>
+         <ValuationCharge>{0..1} FWB-14.3 Valuation Charge</ValuationCharge>
+         <Taxes>{0..1} FWB-14.4 Taxes</Taxes>
+         <DueAgent>{0..1} FWB-14.6 Total Other Charges Due Agent</DueAgent>
+         <DueCarrier>{0..1} FWB-14.7 Total Other Charges Due Carrier</DueCarrier>
+         <Total>{0..1} FWB-14.8 Charge Summary Total</Total>
+      </Prepaid>
+      <Collect>
+         <SKIP>{0..1} FWB-15.1 COL Line Identifier</SKIP>
+         <TotalWeightCharge>{0..1} FWB-15.2 Total Weight Charge</TotalWeightCharge>
+         <ValuationCharge>{0..1} FWB-15.3 Valuation Charge</ValuationCharge>
+         <Taxes>{0..1} FWB-15.4 Taxes</Taxes>
+         <DueAgent>{0..1} FWB-15.6 Total Other Charges Due Agent</DueAgent>
+         <DueCarrier>{0..1} FWB-15.7 Total Other Charges Due Carrier</DueCarrier>
+         <Total>{0..1} FWB-15.8 Charge Summary Total</Total>
+      </Collect>
+   </Summary>
+   <ShipperSignature>{0..1} FWM-16.3 Shipper's Certification Signature</ShipperSignature>
+   <IssuedByCarrier>
+      <SKIP>{1..1} FWB-17.1 ISU Line Identifier</SKIP>
+      <Date>
+         <Day>{1..1} FWB-17.2.2 Day</Day>
+         <Month>{1..1} FWB-17.2.3 Month</Month>
+         <Year>{1..1} FWB-17.2.4 Year</Year>
+      </Date>
+      <Place>{1..1} FWB-17.2.6 Place or Airport/City Code</Place>
+      <Signature>{0..1} FWB-17.3.2 Authorisation - Signature</Signature>
+   </IssuedByCarrier>
+   <OtherService>
+      <SKIP>{1..1} FWB-18.1 OSI Line Identifier</SKIP>
+      <Info>{1..1} FWB-18.3 Other Service Information</Info>
+   </OtherService>
+   <ConvertedCharges>
+      <SKIP>{1..1} FWB-19.1 CDC Line Identifier</SKIP>
+      <DestinationCurrency>{1..1} FWB-19.3.1 ISO Currency Code</DestinationCurrency>
+      <ExchangeRate>{1..1} FWB-19.4.1 Rate of Exchange</ExchangeRate>
+      <CCCharges>{1..1} FWB-19.6 CC Charges in Destination Currency</CCCharges>
+      <ChargesAtDestination>{1..1} FWB-19.8 Charges at Destination</ChargesAtDestination>
+      <TotalCollectCharges>{1..1} FWB-19.8 Total Collect Charges</TotalCollectCharges>
+   </ConvertedCharges>
+   <SenderReference>
+      <Office>
+         <IATAAddress>{0..1} FWB-20.3 Sender Office Message Address</IATAAddress>
+         <SKIP>{0..1} FWB-20.3 Sender Office Message Address</SKIP>
+      </Office>
+      <File>{0..1} FWB-20.5 Sender Office File Reference</File>
+      <Participant>
+         <Identifier>{1..1} FWB-20.6.2 Participant Identifier</Identifier>
+         <Code>{1..1} FWB-20.6.4 Participant Code</Code>
+         <Location>{1..1} FWB-20.6.6 Airport/City Code</Location>
+      </Participant>
+   </SenderReference>
+   <CustomsOrigin>{0..1} FWM-21.3 Customs Origin Code</CustomsOrigin>
+   <Commission>
+      <SKIP>{1..1} FWB-22.1 COI Line Identifier</SKIP>
+      <Indicator>{0..1} FWB-22.3.1 CASS Indicator</Indicator>
+      <Amount>{0..1} FWB-22.5.1 Commission Amount - CASS Settlement Factor</Amount>
+      <Percentage>{0..1} FWB-22.7.1 Commission Percentage - CASS Settlement Factor</Percentage>
+   </Commission>
+   <Incentive>
+      <SKIP>{1..1} FWB-23.1 SII Line Identifier</SKIP>
+      <Amount>{1..1} FWB-23.3 Sales Incentive Amount</Amount>
+      <Indicator>{0..1} FWB-23.5 CASS Indicator</Indicator>
+   </Incentive>
+   <AgentReference>{0..1} FWM-24.3 Agent File Reference</AgentReference>
+   <SpecialHandling>
+      <SKIP>{1..1} FWB-25.1 SPH Line Identifier</SKIP>
+      <HandlingCode>{1..9} FWB-25.2 Special Handling Code</HandlingCode>
+   </SpecialHandling>
+   <HandlingParty>
+      <SKIP>{1..1} FWB-26.1 NOM Line Identifier</SKIP>
+      <Name>{1..1} FWB-26.3 Name</Name>
+      <Place>{1..1} FWB-26.5 Place</Place>
+   </HandlingParty>
+   <ShipmentReference>
+      <SKIP>{1..1} FWB-27.1 SRI Line Identifier</SKIP>
+      <ReferenceNb>{0..1} FWB-27.3 Reference Number</ReferenceNb>
+      <SupplementaryInfo>{0..2} FWB-27.3 Reference Number</SupplementaryInfo>
+   </ShipmentReference>
+   <OtherParticipant>
+      <Name>{1..1} FWB-28.3 Name</Name>
+      <Office>
+         <IATAAddress>{0..1} FWB-28.6 Other Participant Office Message Address</IATAAddress>
+         <SKIP>{0..1} FWB-28.6 Other Participant Office Message Address</SKIP>
+      </Office>
+      <File>{0..1} FWB-28.8 Other Participant Office File Reference</File>
+      <Participant>
+         <Identifier>{1..1} FWB-28.9.2 Participant Identifier</Identifier>
+         <Code>{1..1} FWB-28.9.4 Participant Code</Code>
+         <Location>{1..1} FWB-28.9.6 Airport/City Code</Location>
+      </Participant>
+   </OtherParticipant>
+   <CustomsInformation>
+      <Supplementary>
+         <SKIP>{1..1} FWB-29.1 OCI Line Identifier</SKIP>
+         <CountryCode>{1..1} FWB-29.3 ISO Country Code</CountryCode>
+         <InfoID>{1..1} FWB-29.5 Information Identifier</InfoID>
+         <CustomsID>{1..1} FWB-29.7 Customs Information Identifier</CustomsID>
+         <Info>{1..1} FWB-29.9 Supplementary Customs Information</Info>
+      </Supplementary>
+   </CustomsInformation>
+</FWB>
+

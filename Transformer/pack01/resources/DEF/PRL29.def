@@ -1,0 +1,725 @@
+  IATA Passenger Services Conference Resolutions Manual 29th Edition 
+  PASSENGER RECONCILE LIST (PRL) MESSAGE
+  recommended practice 1719b
+  (prepared by Bernard H. Feb 2011)
+
+  *********************************************************************
+  ** FOREWORD: This sample is a full-fledged message transformation  **
+  ** reflecting true real-world intricacies. Our objective is to     **
+  ** illustrate precisely what this reverseXSL parser is capable of, **
+  ** and how few(!) real-code it does take to handle a true message. **
+  ** For simplified - tutorial-grade - samples, please look to the   **
+  ** web site: www.ReverseXSL.com                                    **
+  **                                                                 **
+  **  IMPORTANT: understanding Regular Expressions is a MUST before  **
+  **  looking any further; your guessing attempts will be defeated!  **
+  **  A one hour tutorial is available at the web site.              **
+  *********************************************************************
+
+  (every line not starting in column 1 is a comment or annotation ignored by the Parser)
+
+  (best viewed with fixed spacing font)
+
+  Next lines support integrated testing facilities (within StylusStudio)
+  #ONE=TypeB_PRL_01.txt;
+  #TWO=TypeB_PRL_02.txt;
+
+    REVISIONS:
+    - This version and associated samples have been packed
+      to illustrate the parsing of IATA messages and are bound
+      to the terms of use published at www.reverseXSL.com
+
+    DESIGN NOTES:
+     * The most important design point is about accepting multiple 'dot-elements' like ".L/4QH6G2/AF"
+       on the same text line. Indeed, a line can be up to 64 chars in theory. 
+       Instead of placing every element on a line of its own,
+       one can stuff multiple elements on the same line up to the 64 chars limit. This can occur elsewhere
+       in passenger data blocks. One approach would have been to cut the message straight from the start
+       on a mixture of newline and space-dot delimiters, yielding a collection of single elements from the start.
+       However, the original message line-numbers are immediately lost making eventual error messages less
+       explicit on the location of syntax errors. We opted for a second approach, that of folding multi-element
+       lines on the spot. The consequence is an additional complexity due to the fact that the Name Element line
+       that may need folding too is also the marker of Passenger data groups. Explanations are contained in the 
+       below DEFinition itself.
+     * We have included the full IATA header syntax into this definition, although a PRL message
+       instance would most often bear simple single recipient/originator headers
+     * Except for very few exceptions (i.e. weight codes), code lists are not verified and not mapped to their explicit counterparts
+     * We try keeping one word XML data element names whenever the meaning can be
+       expressed by element hierarchies. For instance: 
+                   <Booking>...
+                      <Compartment>...
+                            <Fare>F</Fare>
+                    <Routing>...
+                        <Onward>...
+                            <Destination>LON</Destination>
+     * There are numerous element (or element-groups) repetitions without any indication of the maximum repetition 
+       counts in specifications. We guessed! max and ACCepted repetition values may need proper tuning.
+
+SET BASENAMESPACE "http://www.transavia.com/demo" [IKSL.FIWQ.Q9LU.VUR7]
+
+ ----------CONDITIONS---------------------
+ *** yes, this message is full of inter-dependencies! some conditions look like copies of each-other but do
+ *** bear distinct descriptions, essential for quickly fixing syntax errors in the source message
+COND ThisVersion    ".*"              DEPTH 0 R W "Enforce a reference to this parser definition version"
+
+COND MsgPart "(\d+)END\1|\d+ENDPRL"         DEPTH 0 R W "1707b-2.21.1 End Element - must either mark the very last part with ENDPRL, else must match the same PART<number> as indicated at the start of the message"
+ *** the next regex checks for " (?! ) Not matching ( from ^start, only repeated zeros 0+, to end$ ), repeated digits \d+ "
+     i.e. non-zero series of digits
+COND CompartmentSeatCount   "(?!^0+$)\d+"   DEPTH 4 R W "1707b-2.12.3 fitted number of seats by compartment - count: zero counts must be omitted"
+COND CompartmentClassCode   "[FCY]"         DEPTH 4 R W "1707b-2.12.3 fitted number of seats by compartment - code must be one of F, C, or Y"
+COND DownlineSeatCount      "(?!^0+$)\d+"   DEPTH 6 R W "1707b-2.12.5 downline change : fitted number of seats by compartment - count: zero count data must be omitted"
+ *** instead of the A-Z range below, one can enumerate the allowed class codes
+COND DownlineClassCode      "[A-Z]"         DEPTH 6 R W "1707b-2.12.5 downline change : fitted number of seats by compartment - code must be one of F, C, or Y"
+COND WeightCode             "P|[KL]CU?"     DEPTH 5 R W "1707b-3.33.2 Pieces/weight data element rule: indicator is P (pieces) alone, else K or L followed by Checked weight and (optionally) Unchecked weight"
+
+ ----------MESSAGE DEFINITION-------------
+
+MSG     ""               PRL             M 1 1 ACC 1   R F "PRL-0 Full Message with Type-B header" CUT-ON-NL 
+|MARK                    @SourceDEF       COND ThisVersion ".*" "PSCRM/PRL29.def" "NULL"
+
+ ===== [0] IATA Type-B header =====
+ *** variant headers are in use by airlines over the SITA network. The definition below
+ *** accepts the pure ASCII version. Other variants featuring leading/trailing empty lines and control chars do pass
+ *** through the built-in data conversions in the Transformer (depollute with: _NoCtrlBytes+_NoBlankLine+_ToCRLF+_ToUPPER)
+ *** The header is possibly extended with a second address group (common practice, not in formal specs)
+ *** before the .SENDER line.
+
+ *** In case there's no header, the message would begin immediately with the SMI code 'PRL', hence NOT matching ^PRL indicates presence of the SITA header
+|GRP    "^(?!PRL)"    TypeBHeader         O 0 1 ACC 1   R W "TypeB-0 TypeB header with optional SITA network prefix" /iata
+||D     "ZCZC(.*)"       SKIP             O 0 1 ACC 1   R W "SITA-ZC Optional SITA network legacy message framing, ignored" ASMATCHED
+
+ *** first header block with message priority indicator
+ ===== [2.1] Address Element =====
+||SEG "^(Q. )?([A-Z0-9]{7,8}\s)*[A-Z0-9]{7,8}\s*$" NOTAG M 1 4 ACC 8 R F "TypeB-G1 Type-B Recipient line" CUT "(\S+)"
+|||D  "^(Q.)"             @Priority       O 0 1 ACC 1   R W "TypeB-P TypeB Header - Priority Indicator" ASMATCHED
+|||D  "(.+)"              Recipient       M 1 8 ACC 20  R W "TypeB-R TypeB Header - IATA Recipient" UPALPHANUM [7..8]
+
+ *** optional second header block, semantically like a CopyTo set, starting with ".<space><anything><CRLF>" or ".<CRLF>"
+||GRP   "^\.( .*$|$)"    CopyTo           O 0 1 ACC 1   R W "TypeB-G2 Type-B Optional 2nd Recipient block"
+|||D    "^\.( .*$|$)"      SKIP           M 1 1 ACC 1   R F "TypeB-G2dotS Type-B 2nd Recipient block - dummy sender line prefix" ASMATCHED
+|||SEG  "^(Q. )?([A-Z0-9]{7,8}\s)*[A-Z0-9]{7,8}\s*$" NOTAG  M 1 4 ACC 8 R W "TypeB-G2L Type-B 2nd Recipient block - Recipient line" CUT "(\S+)"
+||||D   "^(Q.)"              SKIP         O 0 1 ACC 1   R W "TypeB-G2P Type-B 2nd Recipient block - Priority Indicator, ignored" ASMATCHED
+||||D   "(.*)"               Recipient    M 1 8 ACC 20  R W "TypeB-G2R Type-B 2nd Recipient block - IATA Recipient" UPALPHANUM [7..8]
+
+ *** .SENDER line with optional references substructured as double-signature/date, or date alone, or anything else (we do not parse PIMA refs here)
+ ===== [2.2] Communications Reference Element =====
+||SEG "^\.[A-Z0-9]{7,8}" NOTAG            M 1 1 ACC 1   R F "TypeB-dotS TypeB Header - .Sender line" CUT "^\.(\S+)(?:\s+(\S.*?))?\s*$"
+|||D    "(.*)"             Sender         M 1 1 ACC 1   R W "TypeB-S TypeB Header - IATA Sender" UPALPHANUM [7..8]
+ *** Refs are like "XY/DDHHMM", "XY/DDHHMM ANYTHING", "XYZ/DDHHMM ANYTHING", "DDHHMM ANYTHING", "ANYTHING", ...
+|||SEG  ".+"               NOTAG          O 0 1 ACC 1   R W "TypeB-SR TypeB Header - IATA Sender References" CUT "^(...?/)?(\d{6})?\s?(\S.*)?$"
+||||D   "(...?)/"            DoubleSignature O 0 1 ACC 1 R W "TypeB-DS TypeB Header - Double Signature (Billing-to)" UPALPHANUM [2..3]
+||||SEG "^(\d{6})$"          Date         O 0 1 ACC 1   R W "TypeB-DT TypeB Header - Date DDHHMM" CUT-FIXED-(2)
+|||||D  "(..)"                 Day        M 1 1 ACC 1   R W "TypeB-DD TypeB Header - Date - Day DD" DIGIT
+|||||D  "(..)"                 HH         M 1 1 ACC 1   R W "TypeB-HH TypeB Header - Date - Hour HH" DIGIT
+|||||D  "(..)"                 MM         M 1 1 ACC 1   R W "TypeB-MM TypeB Header - Date - Minutes MM" DIGIT
+||||D   "(.*)"               References   O 0 1 ACC 1   R W "TypeB-REF TypeB Header - Sender References - unparsed" ASMATCHED
+
+ *** poorly formatted messages may contain a few prefix lines before the formal SMI (Standard Message Identifier)
+||D "^(?!PRL$)(.*)$"     RAW              O 0 0 ACC 5   R W "PRL-- Garbage lines prefixed to the standard message" ASMATCHED
+
+ ===== END of Type-B header (this header definition is identical for all IATA messages) ===== 
+
+
+ /!\ /!\ /!\ all data element descriptions below bear the reference to the element label in
+             IATA PSCRM Recommended Practice 1707b (data element directory) or 1719b (PRL tag alone) as indicated in the comment
+
+ 
+ ===== [2.3] Message Identification =====
+ --- we match it, but do not need including it in XML output given that the root is already <PRL> ! so SKIP it..
+|D     "^(PRL)$"        SKIP                M 1 1 ACC 1   R F "1707b-2.3.1 Standard Message Identifier" ASMATCHED
+
+
+ ===== [2.4] Flight Element =====
+ --- tip: this element bears a PART indicator that is linked to the whole message and not the flight in proper (but for referencing parts of the same whole...)
+ --- so we use a NOTAG segment to allow attaching the PART as attribute to the parent Message root
+|SEG    ""          NOTAG                   M 1 1 ACC 1   R F "PRL-2.4 Flight Element" CUT "^(..\D?)(\w{2,5})/(\S+) (\S\S\S)(\S\S\S)? PART(.+)$"
+||GRP   ""           Flight                 M 1 1 ACC 1   R W "1707b-2.4.1 flight information" /pscrm
+     *** Airline code actual format is either aa, na or an. For future planning purposes, the format may become “aaa”.
+|||D    "(.*)"        Carrier               M 1 1 ACC 1   R W "1707b-2.4.1 flight information - flight/carrier" UPALPHANUM
+|||D    "(.*)"        Number                M 1 1 ACC 1   R W "1707b-2.4.1 flight information - flight/number" UPALPHANUM
+|||SEG  ""            Date                  M 1 1 ACC 1   R W "1707b-2.4.1 flight information - date" CUT "^(..)(.+)$"
+||||D   "(..)"         Day                  M 1 1 ACC 1   R W "1707b-2.4.1 flight information - date/day" DIGIT
+||||D   "(.*)"         Month                M 1 1 ACC 1   R W "1707b-2.4.1 flight information - date/month" UPALPHANUM
+|||D    "(...)"       BoardingAirport       M 1 1 ACC 1   R W "1707b-2.4.2 boarding airport code" UPALPHANUM
+|||D    "(...)"       TransferPoint         O 0 1 ACC 1   R W "1707b-2.4.3 transfer point airport code" UPALPHANUM
+    *** the MsgPart CONDition will check matching PART numbers at begin and end of the message
+||D     "(.*)"       @PART                  C 1 1 ACC 1   COND MsgPart "(.*)" "1707b-2.4.5 part number" DIGIT
+
+
+ ===== [2.5] Seat Configuration Element =====
+|SEG    "^CFG"      Seat                    O 0 1 ACC 5   R W "PRL-2.5 Seat Confirguration Element" CUT "^CFG/(\w+)(/\w+)?( .*)?$" /pscrm
+||SEG   ""           Configuration          M 1 1 ACC 1   R W "1707b-2.12.3 fitted number of seats by compartment" CUT "(\d+)(\D+)"
+|||GRP  ""             Compartment          M 1 3 ACC 9   R W "1707b-2.12.3 fitted number of seats by compartment - count & code pair" 
+||||D   "(.*)"          NOTAG               C 1 1 ACC 1   COND CompartmentSeatCount "(.*)" "1707b-2.12.3 fitted number of seats by compartment - count" DIGIT [1..3]
+||||D   "(.*)"          @class              C 1 1 ACC 1   COND CompartmentClassCode "(.*)" "1707b-2.12.3 fitted number of seats by compartment - code" ASMATCHED
+||D     "/(.*)"      AircraftType           O 0 1 ACC 1   R W "1707b-2.12.4 aircraft type" ASMATCHED
+||SEG   "^ "         NOTAG                  O 0 1 ACC 1   R W "1707b-2.12.5 downline aircraft or configuration change" CUT " +(...) +(\w+)(/\w+)?"
+|||GRP  ""            DownlineChange        M 1 3 ACC 9   R W "1707b-2.12.5 downline aircraft or configuration change"
+||||D   "(...)"        atAirport            M 1 1 ACC 1   R W "1707b-2.12.5 downline aircraft or configuration change" UPALPHA
+||||SEG   ""           Configuration        M 1 1 ACC 1   R W "1707b-2.12.5 downline fitted number of seats by compartment" CUT "(\d+)(\D+)"
+|||||GRP  ""             Compartment        M 1 3 ACC 9   R W "1707b-2.12.5 downline fitted number of seats by compartment - count & code pair" 
+||||||D   "(.*)"          NOTAG             C 1 1 ACC 1   COND DownlineSeatCount "(.*)" "1707b-2.12.5 fitted number of seats by compartment - count" DIGIT [1..3]
+||||||D   "(.*)"          @class            C 1 1 ACC 1   COND DownlineClassCode "(.*)" "1707b-2.12.5 fitted number of seats by compartment - code" ASMATCHED
+||||D     "/(.*)"      AircraftType         O 0 1 ACC 1   R W "1707b-2.12.4 aircraft type" ASMATCHED
+
+
+ ===== [2.6] Class Codes Element =====
+|SEG    "^RBD"      Booking                 O 0 1 ACC 1   R W "PRL-2.6 Class Codes Element" CUT-ON-RNBSP  /pscrm
+||D     "(RBD)"      SKIP                   M 1 1 ACC 1   R W "1707b-2.10.1 ReservationBookingDesignator identifying code" ASMATCHED
+||SEG   ""           Compartment            M 1 9 ACC 9   R W "1707b-2.10.2 compartment and associated fare classes" CUT-ON-(/)
+|||D    "(.*)"        @class                M 1 1 ACC 1   R W "1707b-2.10.2 compartment code" UPALPHA
+|||SEG  ""            NOTAG                 M 1 1 ACC 1   R W "1707b-2.10.2 booking far classes" CUT "(.)"
+||||D   "(.*)"         Fare                 M 1 20 ACC 20 R W "1707b-2.10.2 booking far classes" UPALPHA
+
+ ##### MAIN LOOP ##################### Passenger List By Destination ##########################"
+
+|GRP    "^-"        Total                   M 1 99 ACC 99 R W "PRL-2.7 Totals By Destination (name groups)"
+
+ ===== [2.7] Totals By Destination Element =====
+
+||SEG   "^-"         Count                  M 1 1 ACC 1   R W "1707b-2.5.1 Passenger counts" CUT "-(...)(\d+)(.)(-PAD\d+)?$"
+|||D    "(.*)"        ByDestination         M 1 1 ACC 1   R W "1707b-2.5.1.2 destination airport code" UPALPHA
+|||D    "(.*)"        Passengers            M 1 1 ACC 1   R W "1707b-2.5.1.3 total number of passengers" DIGIT [2..3]
+|||D    "(.*)"        InClassOrFare         M 1 1 ACC 1   R W "1707b-2.5.1.4 compartment or faore class" UPALPHA
+|||D    "-PAD(.*)"    PAD                   O 0 1 ACC 1   R W "1707b-2.5.1.7 number of PAD / Passengers Available for Disambarkation" DIGIT [1..3]
+
+ ===== [2.8] Name Element =====
+    *** passenger details can span multiple elements that we group per passenger under XML element 'Passenger'
+||GRP   "^\d"        Passenger              O 0 999 ACC 999 R W "PRL-2.8 Name Element (leading passenger details group)"  /pscrm
+
+    *** we shall fold every passenger line on space-dot (we acccept too multispace-dot as delimiter), 
+    *** preserving the leading dot char (hence using a zero-width look-ahead for the dot)
+|||SEG  "^\d"         NOTAG                 M 1 1 ACC 1    R W "PRL-2.8_to_2.19 passenger details (Name Element line folding)" CUT-ON-" +(?=\.)"
+
+    *** first, we parse the Name Element in proper, always first and non repeatable 
+||||SEG    "^\d"       NOTAG                M 1 1 ACC 1    R W "1707b-2.9 passenger name and party" CUT "^(\d+)([\w ]+)/([\w ]+?)(MRS|MSTR|MISS|MS|MR|DR|PR)?(-\w+)?$"
+|||||D     "(.*)"       Seats               M 1 1 ACC 1    R W "1707b-2.9.1.1 passenger name and party - seat count" DIGIT
+|||||D     "(.*)"       Surname             M 1 1 ACC 1    R W "1707b-2.9.1.1 passenger surname" ASMATCHED
+|||||D     "(.*)"       Names               M 1 1 ACC 1    R W "1707b-2.9.1.1 passenger name" ASMATCHED
+|||||D     "(?!-)(.*)"  Title               O 0 1 ACC 1    R W "1707b-2.9.1.1 passenger title" ASMATCHED
+|||||SEG   "^-"         GroupedWith         O 0 1 ACC 1    R W "1707b-2.9.2 party group" CUT "^(\D+)(\d+)$"
+||||||D    "(.*)"         Id                M 1 1 ACC 1    R W "1707b-2.9.2.2 party/group identifier" ASMATCHED
+||||||D    "(.*)"         OfTotal           M 1 1 ACC 1    R W "1707b-2.9.2.3 total number of seats in the party/group" ASMATCHED
+
+    *** then we consume all possible single-elements THAT CAN APPEAR ON THE Name Element LINE, 
+    *** such as to digest multiple elements on that same line just CUT into single-elements
+
+    +++ ALL Elements [2.9] to [2.19] below are exact copies (at same DEPTH too) of the same elements appearing further down +++
+    +++ We copy them here SELECTIVELY here below based on the possibility of finding them on the Name Element line          +++
+
+ ===== [2.9] Automated PNR Address Element =====
+||||SEG    "^\.L/"      AutomatedPNR        O 0 20 ACC 20  R W "PRL-2.9 Automated PNR Address Element" CUT-ON-(/)
+|||||D     "(\.L)"       SKIP               M 1 1 ACC 1    R W "1707b-3.18.1 Automated PNR Address Element ID" ASMATCHED
+|||||D     "(.*)"        Address            M 1 1 ACC 1    R W "1707b-3.18.2 PNR Address" ASMATCHED
+|||||D     "(.*)"        Airline            O 0 1 ACC 1    R W "1707b-3.18.4 airline code" ASMATCHED
+
+ ===== [2.10] Marketing Flight Information Element =====
+        --- assumed never found on the Name element line ---
+ ===== [2.11] Firm DG/ID/RG Passenger Elements =====
+        --- assumed never found on the Name element line ---
+ ===== [2.12] Space Available DG/ID/RG Passenger Elements =====
+        --- assumed never found on the Name element line ---
+ ===== [2.13] Pieces/Weight Data Element =====
+        --- assumed never found on the Name element line ---
+ ===== [2.14] Baggage Pooling Element =====
+        --- assumed never found on the Name element line ---
+ ===== [2.15] Baggage Tag Details Element =====
+        --- assumed never found on the Name element line ---
+ ===== [2.16] Inbound Connection Element =====
+        --- assumed never found on the Name element line ---
+ ===== [2.17] Onward Connection(s) Element =====
+        --- assumed never found on the Name element line ---
+ ===== [2.18] Remarks Element =====
+        --- assumed never found on the Name element line ---
+ ===== [2.19] Security Information Element =====
+        --- assumed never found on the Name element line ---
+
+    *** All subsequent lines following the leading Name Element line may also contain multiple elements 
+    *** on the samle line. Hence, we shall fold them on space-dot (we acccept too multispace-dot as delimiter), 
+    *** preserving the leading dot char (hence using a zero-width look-ahead for the dot)
+    *** Expert tip: one cannot combine the mutli-element cut for group-leading Name Element line with that 
+    *** of subsequent lines... Name Elements cannot repeat alone else mark a new group instance, dot-elements can... think!
+
+|||SEG  "^\."         NOTAG                 O 0 99 ACC 99   R W "PRL-2.9_to_2.19 passenger details (dot-element line folding)" CUT-ON-" +(?=\.)"
+    *** then we consume all possible single-elements, such as to digest above folded multi-element lines
+
+    +++ ALL Elements [2.9] to [2.19] below can be copied into the Name Element line parsing context here above +++
+
+ ===== [2.9] Automated PNR Address Element =====
+||||SEG    "^\.L/"      AutomatedPNR        O 0 20 ACC 20  R W "PRL-2.9 Automated PNR Address Element" CUT-ON-(/)
+|||||D     "(\.L)"       SKIP               M 1 1 ACC 1    R W "1707b-3.18.1 Automated PNR Address Element ID" ASMATCHED
+|||||D     "(.*)"        Address            M 1 1 ACC 1    R W "1707b-3.18.2 PNR Address" ASMATCHED
+|||||D     "(.*)"        Airline            O 0 1 ACC 1    R W "1707b-3.18.4 airline code" ASMATCHED
+
+ ===== [2.10] Marketing Flight Information Element =====
+||||SEG    "^\.M/"      MarketingInfo       O 0 20 ACC 20  R W "PRL-2.10 Marketing Flight Information Element" CUT "^\.M/(..\D?)(\w{2,5}?)([A-Z])(\d\d?)([A-Z]{3})([A-Z]{3})(\d{4})?([A-Z]{2})?$"
+|||||GRP   ""            Flight             M 1 1 ACC 1    R W "1707b-3.19.2 Marketing Flight Information - Flight"
+||||||D    "(.*)"         Carrier           M 1 1 ACC 1    R W "1707b-3.19.2a Flight Info - carrier" ASMATCHED
+||||||D    "(.*)"         Number            M 1 1 ACC 1    R W "1707b-3.19.2b Flight Info - number" ASMATCHED
+|||||D     "(.*)"        FareClass          M 1 1 ACC 1    R W "1707b-3.19.2 Marketing Flight Info - fare class" ASMATCHED
+|||||D     "(.*)"        DepartureDay       M 1 1 ACC 1    R W "1707b-3.19.2 Marketing Flight Info - departure date/day" ASMATCHED
+|||||D     "(.*)"        Origin             M 1 1 ACC 1    R W "1707b-3.19.2 Marketing Flight Info - origin airport" ASMATCHED
+|||||D     "(.*)"        Destination        M 1 1 ACC 1    R W "1707b-3.19.2 Marketing Flight Info - destination airport" ASMATCHED
+|||||D     "(\d{4})"     DepartureTime      O 0 1 ACC 1    R W "1707b-3.19.2 Marketing Flight Info - departure time" ASMATCHED
+|||||D     "([A-Z]+)"    ReservationStatus  O 0 1 ACC 1    R W "1707b-3.19.2 Marketing Flight Info - reservation status" ASMATCHED
+
+ ===== [2.11] Firm DG/ID/RG Passenger Elements =====
+||||SEG    "^\.(DG|ID|RG)1/"   FirmBooking  O 0 20 ACC 20  R W "PRL-2.11 Firm DG/ID/RG Passenger Element" CUT "^\.(..)1/([^-]+)(-.*)?$"
+|||||D     "(..)"             @DiscountType M 1 1 ACC 1    R W "1707b-3.7/3.14/3.25 Firm DG/ID/RG Passenger Element" ASMATCHED
+|||||D     "(.*)"               Priority    M 1 1 ACC 1    R W "1707b-3.7.2/3.14.2/3.25.2 Firm DG/ID/RG Passenger Element - priority" ASMATCHED
+|||||SEG   "^-"                 Seniority   O 0 1 ACC 1    R W "1707b-3.7.4/3.14.4/3.25.4 Firm DG/ID/RG Passenger Element - seniority" CUT "^-(\d+)([A-Z]{3})(\d+)$"
+||||||D    "(.*)"                Day        M 1 1 ACC 1    R W "1707b-3.7.4/3.14.4/3.25.4 Firm DG/ID/RG Passenger Element - seniority date/day" ASMATCHED
+||||||D    "(.*)"                Month      M 1 1 ACC 1    R W "1707b-3.7.4/3.14.4/3.25.4 Firm DG/ID/RG Passenger Element - seniority date/month" ASMATCHED
+||||||D    "(.*)"                Year       M 1 1 ACC 1    R W "1707b-3.7.4/3.14.4/3.25.4 Firm DG/ID/RG Passenger Element - seniority date/year" ASMATCHED
+
+ ===== [2.12] Space Available DG/ID/RG Passenger Elements =====
+||||SEG    "^\.(DG|ID|RG)2/"   SpaceAvailableBooking O 0 20 ACC 20  R W "PRL-2.12 Space DG/ID/RG Passenger Element" CUT "^\.(..)2/([^-]+)(-.*)?$"
+|||||D     "(..)"             @DiscountType M 1 1 ACC 1    R W "1707b-3.8/3.15/3.26 Space DG/ID/RG Passenger Element" ASMATCHED
+|||||D     "(.*)"               Priority    M 1 1 ACC 1    R W "1707b-3.8.2/3.15.2/3.26.2 Space DG/ID/RG Passenger Element - priority" ASMATCHED
+|||||SEG   "^-"                 Seniority   O 0 1 ACC 1    R W "1707b-3.8.4/3.15.4/3.26.4 Space DG/ID/RG Passenger Element - seniority" CUT "^-(\d+)([A-Z]{3})(\d+)$"
+||||||D    "(.*)"                Day        M 1 1 ACC 1    R W "1707b-3.8.4/3.15.4/3.26.4 Space DG/ID/RG Passenger Element - seniority date/day" ASMATCHED
+||||||D    "(.*)"                Month      M 1 1 ACC 1    R W "1707b-3.8.4/3.15.4/3.26.4 Space DG/ID/RG Passenger Element - seniority date/month" ASMATCHED
+||||||D    "(.*)"                Year       M 1 1 ACC 1    R W "1707b-3.8.4/3.15.4/3.26.4 Space DG/ID/RG Passenger Element - seniority date/year" ASMATCHED
+
+ ===== [2.13] Pieces/Weight Data Element =====
+||||SEG    "^\.W/"        Baggage           O 0 20 ACC 20  R W "PRL-2.13 Pieces/Weight Data Element" CUT-ON-(/)
+|||||D     "(\.W)"         SKIP             M 1 1 ACC 1    R W "1707b-3.33.1 Pieces/weight data element ID" ASMATCHED
+|||||D     "(.*)"          @indicator       C 1 1 ACC 1    COND WeightCode "(.*)" "1707b-3.33.2 Pieces/weight data element - weight indicator" ASMATCHED
+|||||D     "(.*)"          CheckedPieces    M 1 1 ACC 1    R W "1707b-3.33.4 Pieces/weight data element - number of checked baggage" ASMATCHED
+|||||D     "(.*)"          CheckedWeight    C 0 1 ACC 1    COND WeightCode "C" "1707b-3.33.6 Pieces/weight data element - checked baggage weight" NUMERIC
+|||||D     "(.*)"          UncheckedWeight  C 0 1 ACC 1    COND WeightCode "U" "1707b-3.33.8 Pieces/weight data element - unchecked (hand carried) weight" NUMERIC
+|||||MARK                  @unit            COND WeightCode "^K.*" "KILOS" "NULL"
+|||||MARK                  @unit            COND WeightCode "^L.*" "POUNDS" "NULL"
+
+ ===== [2.14] Baggage Pooling Element =====
+||||SEG    "^\.BG/"        BaggagePool      O 0 1 ACC 9    R W "PRL-2.14 Baggage Pooling Element" CUT-ON-(/)
+|||||D     "(\.BG)"         SKIP            M 1 1 ACC 1    R W "1707b-3.3.1 Baggage pooling element ID" ASMATCHED
+|||||D     "(.*)"           NOTAG           M 1 1 ACC 1    R W "1707b-3.3.2 Baggage pooling element - pooling reference number" DIGIT [3..3]
+
+ ===== [2.15] Baggage Tag Details Element =====
+    *** Formally in the standard there are two possible patterns: numeric (with two / separators)or alpha numeric (with three / separators)
+    *** reality is that we shall also accept alpa numeric tags with two / separators, where the ConsecutiveTags field is missing!
+    *** this is implemented in three different CUT patterns (separated by | = the 'or' regex operator) yielding a common series of data fields
+||||SEG  "^\.N/"         BaggageTag         O 0 99 ACC 99  R W "PRL-2.15 Baggage Tag Details Element" CUT "^\.N/(\d+?)(\d{3})/([^/]+)$|^\.N/(\w+)/(\d*)/([^/]+)$|^\.N/(\w+)/([^/\d]+)$"
+|||||D   "(.*)"           ID                M 1 1 ACC 1    R W "1707b-3.20.1.2/3.20.2.2 Baggage Tag - ID/number" ASMATCHED
+|||||D   "(\d*)"          ConsecutiveTags   O 0 1 ACC 1    R W "1707b-3.20.1.3/3.20.2.4 Baggage Tag - consecutive numbers" DIGIT [1..]
+|||||D   "(.*)"           FinalDestination  M 1 1 ACC 1    R W "1707b-3.20.1.5/3.20.2.6 Baggage Tag - final destination airport" ASMATCHED
+
+ ===== [2.16] Inbound Connection Element =====
+||||SEG    "^\.I/"      InboundConnection   O 0 5 ACC 9    R W "PRL-2.16 Inbound Connection Element" CUT "^\.I/(..\D?)(\w{2,5}?)([A-Z])(\d\d?)([A-Z]{3})([A-Z]{3})?(\d{4})?(-1|\+1|\+2)?([A-Z]{2})?$"
+|||||GRP   ""            Flight             M 1 1 ACC 1    R W "1707b-3.13.2 Inbound Connection Flight Information - Flight"
+||||||D    "(.*)"         Carrier           M 1 1 ACC 1    R W "1707b-3.13.2a Flight Info - carrier" ASMATCHED
+||||||D    "(.*)"         Number            M 1 1 ACC 1    R W "1707b-3.13.2b Flight Info - number" ASMATCHED
+|||||D     "(.*)"        FareClass          M 1 1 ACC 1    R W "1707b-3.13.2 Inbound Connection Flight Info - fare class" ASMATCHED
+|||||D     "(\d+)"       BoardingDay        M 1 1 ACC 1    R W "1707b-3.13.2 Inbound Connection Flight Info - boarding date/day" ASMATCHED
+|||||D     "([A-Z]*)"    BoardingPoint      M 1 1 ACC 1    R W "1707b-3.13.2 Inbound Connection Flight Info - boarding airport" ASMATCHED
+|||||D     "([A-Z]*)"    ArrivalPoint       O 0 1 ACC 1    R W "1707b-3.13.2 Inbound Connection Flight Info - arrival airport" ASMATCHED
+|||||D     "(\d{4})"     ArrivalTime        O 0 1 ACC 1    R W "1707b-3.13.2 Inbound Connection Flight Info - arrival time" ASMATCHED
+|||||D     "([-+][12])"  DateVariation      O 0 1 ACC 1    R W "1707b-3.13.2 Inbound Connection Flight Info - date variation" ASMATCHED
+|||||D     "([A-Z]+)"    ReservationStatus  O 0 1 ACC 1    R W "1707b-3.13.2 Inbound Connection Flight Info - reservation status" ASMATCHED
+
+ ===== [2.17] Onward Connection(s) Element =====
+    *** Compared with the Inbound connection, there is a subbtle change in the way to CUT this element because it is the first of 
+    *** the sequence of two airport codes that is now optional; hence we shall match an empty element to preserve position sequence. The default
+    *** rule (cfr DEFinition files doc) 'Remove Non-Repeatable Nil Optional Elements' then  suppresses the empty 'BoardingPoint' from the XML output
+||||SEG    "^\.O/"      OutboundConnection  O 0 5 ACC 9    R W "PRL-2.17 Outbound Connection Element" CUT "^\.O/(..\D?)(\w{2,5}?)([A-Z])(\d\d?)([A-Z]{3}|)([A-Z]{3})(\d{4})?([A-Z]{2})?$"
+|||||GRP   ""            Flight             M 1 1 ACC 1    R W "1707b-3.21.2 Connection Flight Information - Flight"
+||||||D    "(.*)"         Carrier           M 1 1 ACC 1    R W "1707b-3.21.2a Flight Info - carrier" ASMATCHED
+||||||D    "(.*)"         Number            M 1 1 ACC 1    R W "1707b-3.21.2b Flight Info - number" ASMATCHED
+|||||D     "(.*)"        FareClass          M 1 1 ACC 1    R W "1707b-3.21.2 Outbound Connection Flight Info - fare class" ASMATCHED
+|||||D     "(\d+)"       BoardingDay        M 1 1 ACC 1    R W "1707b-3.21.2 Outbound Connection Flight Info - boarding date/day" ASMATCHED
+|||||D     "([A-Z]*)"    BoardingPoint      O 0 1 ACC 1    R W "1707b-3.21.2 Outbound Connection Flight Info - boarding airport" ASMATCHED [3..3]
+|||||D     "([A-Z]*)"    ArrivalPoint       M 1 1 ACC 1    R W "1707b-3.21.2 Outbound Connection Flight Info - arrival airport" ASMATCHED [3..3]
+|||||D     "(\d{4})"     DepartureTime      O 0 1 ACC 1    R W "1707b-3.21.2 Outbound Connection Flight Info - departure time" ASMATCHED
+|||||D     "([A-Z]+)"    ReservationStatus  O 0 1 ACC 1    R W "1707b-3.21.2 Outbound Connection Flight Info - reservation status" ASMATCHED
+
+ ===== [2.18] Remarks Element =====
+    *** there is a number of structured remarks to process:
+    *** A) DOCS - Travel Documents
+||||SEG    "^\.R/DOCS" TravelDocuments     O 0 1 ACC 1    R W "1707b-3.40.1 Remarks Element - API / Advanced Passenger Information - travel documents" CUT "^\.R/DOCS ([A-Z]{2}\d+)/(.+?)(-\d[^/]+/[^/]+)?$"
+|||||D     "^(.*?)1?$"  @ActionCode        M 1 1 ACC 1    R W "1707b-3.40.1.4 API DOCS - action/status code" ASMATCHED
+|||||SEG   ""           NOTAG              M 1 1 ACC 1    R W "1707b-3.40.1.5-26 API DOCS - sub elements" CUT-ON-(/)
+||||||D    "(.*)"       Type               O 0 1 ACC 1    R W "1707b-3.40.1.6 API DOCS - document type" ASMATCHED [1..]
+||||||D    "(.*)"       IssuingState       O 0 1 ACC 1    R W "1707b-3.40.1.8 API DOCS - issuing country/state" ASMATCHED [1..]
+||||||D    "(.*)"       DocNumber          O 0 1 ACC 1    R W "1707b-3.40.1.10 API DOCS - document number" ASMATCHED [1..]
+||||||D    "(.*)"       Nationality        O 0 1 ACC 1    R W "1707b-3.40.1.12 API DOCS - passenger nationality" ASMATCHED [1..]
+||||||D    "(.*)"       BirthDate          O 0 1 ACC 1    R W "1707b-3.40.1.14 API DOCS - date of birth" ASMATCHED [1..]
+||||||D    "(.*)"       Gender             O 0 1 ACC 1    R W "1707b-3.40.1.16 API DOCS - gender code" ASMATCHED [1..]
+||||||D    "(.*)"       DocExpiry          O 0 1 ACC 1    R W "1707b-3.40.1.18 API DOCS - document expiry date" ASMATCHED [1..]
+||||||D    "(.*)"       SurnameOnDoc       O 0 1 ACC 1    R W "1707b-3.40.1.20 API DOCS - document surname" ASMATCHED [1..]
+||||||D    "(.*)"       FirstNameOnDoc     O 0 1 ACC 1    R W "1707b-3.40.1.22 API DOCS - document first given name" ASMATCHED [1..]
+||||||D    "(.*)"       SecondNameOnDoc    O 0 1 ACC 1    R W "1707b-3.40.1.24 API DOCS - document second given name" ASMATCHED [1..]
+||||||D    "(.*)"       @MultiPassengerIndicator O 0 1 ACC 1 R W "1707b-3.40.1.26 API DOCS - multi-passenger passport holder indicator" ASMATCHED [1..]
+|||||SEG    "^-"        Passenger          O 0 1 ACC 1    R W "1707b-3.40.1.27 API DOCS - passenger identification" CUT "^-\d([\w ]+)/([\w ]+?)(MRS|MSTR|MISS|MS|MR|DR|PR)?$"
+||||||D     "(.*)"       Surname           M 1 1 ACC 1    R W "1707b-3.40.1.27 API DOCS - passenger surname" ASMATCHED
+||||||D     "(.*)"       Names             M 1 1 ACC 1    R W "1707b-3.40.1.27 API DOCS - passenger name" ASMATCHED
+||||||D     "(.+)"       Title             O 0 1 ACC 1    R W "1707b-3.40.1.27 API DOCS - passenger title" ASMATCHED
+    *** B) DOCA - Passenger Address Info
+||||SEG    "^\.R/DOCA" AddressInformation  O 0 1 ACC 1    R W "1707b-3.40.3 Remarks Element - API / Advanced Passenger Information - address information" CUT "^\.R/DOCA ([A-Z]{2})(\d+)/(.+?)(-\d[^/]+/[^/]+)?$"
+|||||D     "(.*)"       @StatusCode        M 1 1 ACC 1    R W "1707b-3.40.3.4 API DOCS - action/status code" ASMATCHED
+|||||D     "(.*)"       NumberOfPassengers M 1 1 ACC 1    R W "1707b-3.40.3.5 API DOCS - number of passengers to whom the element applies" DIGIT
+|||||SEG   ""           NOTAG              M 1 1 ACC 1    R W "1707b-3.40.3.7-19 API DOCS - sub elements" CUT-ON-(/)
+||||||D    "(.*)"       Type               O 0 1 ACC 1    R W "1707b-3.40.3.7 API DOCS - address type" ASMATCHED [1..]
+||||||D    "(.*)"       Country            O 0 1 ACC 1    R W "1707b-3.40.3.9 API DOCS - country" ASMATCHED [1..]
+||||||D    "(.*)"       AddressLine        O 0 1 ACC 1    R W "1707b-3.40.3.11 API DOCS - address details" ASMATCHED [1..]
+||||||D    "(.*)"       City               O 0 1 ACC 1    R W "1707b-3.40.3.13 API DOCS - city" ASMATCHED [1..]
+||||||D    "(.*)"       StateOrProvince    O 0 1 ACC 1    R W "1707b-3.40.3.15 API DOCS - state or province" ASMATCHED [1..]
+||||||D    "(.*)"       PostalCode         O 0 1 ACC 1    R W "1707b-3.40.3.17 API DOCS - zip/postal code" ASMATCHED [1..]
+||||||D    "(.*)"       @InfantIndicator   O 0 1 ACC 1    R W "1707b-3.40.3.19 API DOCS - infant indicator" ASMATCHED [1..]
+|||||SEG    "^-"        Passenger          O 0 1 ACC 1    R W "1707b-3.40.3.20 API DOCS - passenger identification" CUT "^-\d([\w ]+)/([\w ]+?)(MRS|MSTR|MISS|MS|MR|DR|PR)?$"
+||||||D     "(.*)"       Surname           M 1 1 ACC 1    R W "1707b-3.40.3.20 API DOCS - passenger surname" ASMATCHED
+||||||D     "(.*)"       Names             M 1 1 ACC 1    R W "1707b-3.40.3.20 API DOCS - passenger name" ASMATCHED
+||||||D     "(.+)"       Title             O 0 1 ACC 1    R W "1707b-3.40.3.20 API DOCS - passenger title" ASMATCHED
+    *** C) DOCO - Passenger Other Travel Related Info
+||||SEG "^\.R/DOCO" OtherTravelInformation O 0 1 ACC 1    R W "1707b-3.40.2 Remarks Element - API / Advanced Passenger Information - other travel related information" CUT "^\.R/DOCO ([A-Z]{2}\d+)/(.+?)(-\d[^/]+/[^/]+)?$"
+|||||D     "^(.*?)1?$"  @ActionCode        M 1 1 ACC 1    R W "1707b-3.40.2.4 API DOCS - action/status code" ASMATCHED
+|||||SEG   ""           NOTAG              M 1 1 ACC 1    R W "1707b-3.40.2.6-18 API DOCS - sub elements" CUT-ON-(/)
+||||||D    "(.*)"       PlaceOfBirth       O 0 1 ACC 1    R W "1707b-3.40.2.6 API DOCS - place of birth" ASMATCHED [1..]
+||||||D    "(.*)"       TravelDocType      O 0 1 ACC 1    R W "1707b-3.40.2.8 API DOCS - travel document type" ASMATCHED [1..]
+||||||GRP  ""           Visa               O 0 1 ACC 1    R W "1707b-3.40.2.10-16 API DOCS - visa details"
+|||||||D    "(.*)"       Number            O 0 1 ACC 1    R W "1707b-3.40.2.10 API DOCS - visa document number" ASMATCHED [1..]
+|||||||D    "(.*)"       IssuePlace        O 0 1 ACC 1    R W "1707b-3.40.2.12 API DOCS - visa document place of issue" ASMATCHED [1..]
+|||||||D    "(.*)"       IssueDate         O 0 1 ACC 1    R W "1707b-3.40.2.14 API DOCS - visa document issue date" ASMATCHED [1..]
+|||||||D    "(.*)"       ForCountry        O 0 1 ACC 1    R W "1707b-3.40.3.16 API DOCS - country for which the visa applies" ASMATCHED [1..]
+||||||D    "(.*)"       @InfantIndicator   O 0 1 ACC 1    R W "1707b-3.40.2.18 API DOCS - infant indicator" ASMATCHED [1..]
+|||||SEG    "^-"        Passenger          O 0 1 ACC 1    R W "1707b-3.40.2.20 API DOCS - passenger identification" CUT "^-\d([\w ]+)/([\w ]+?)(MRS|MSTR|MISS|MS|MR|DR|PR)?$"
+||||||D     "(.*)"       Surname           M 1 1 ACC 1    R W "1707b-3.40.2.20 API DOCS - passenger surname" ASMATCHED
+||||||D     "(.*)"       Names             M 1 1 ACC 1    R W "1707b-3.40.2.20 API DOCS - passenger name" ASMATCHED
+||||||D     "(.+)"       Title             O 0 1 ACC 1    R W "1707b-3.40.2.20 API DOCS - passenger title" ASMATCHED
+    *** D) FQTV - Frequent Traveler Data
+||||SEG    "^\.R/FQTV" FrequentTraveler    O 0 1 ACC 1    R W "1707b-3.24 Remarks Element - frequent traveler information" CUT "^\.R/FQTV (.+?)(-\d[^/]+/[^/]+)?$"
+|||||D     "(.*)"       Information        M 1 1 ACC 1    R W "1707b-3.24.2 Remarks Element - frequent traveler information - UNPARSED" ASMATCHED
+|||||SEG    "^-"        Passenger          O 0 1 ACC 1    R W "1707b-3.24.8 passenger identification" CUT "^-\d([\w ]+)/([\w ]+?)(MRS|MSTR|MISS|MS|MR|DR|PR)?$"
+||||||D     "(.*)"       Surname           M 1 1 ACC 1    R W "1707b-3.24.8 passenger surname" ASMATCHED
+||||||D     "(.*)"       Names             M 1 1 ACC 1    R W "1707b-3.24.8 passenger name" ASMATCHED
+||||||D     "(.+)"       Title             O 0 1 ACC 1    R W "1707b-3.24.8 passenger title" ASMATCHED
+    *** E) SEAT - seat number
+||||SEG    "^\.R/SEAT" Seat                O 0 1 ACC 1    R W "1707b-3.24 Remarks Element - seat information" CUT "^\.R/SEAT ([A-Z]{2}\d+) (.+?)(-\d[^/]+/[^/]+)?$"
+|||||D     "^(.*?)1?$"  @StatusCode        M 1 1 ACC 1    R W "1707b-3.24.4 Remarks Element - action/status code" ASMATCHED
+|||||D     "(.*)"       Number             M 1 1 ACC 1    R W "1707b-3.24.6 Remarks Element - seat data - UNPARSED" ASMATCHED
+|||||SEG    "^-"        Passenger          O 0 1 ACC 1    R W "1707b-3.24.8 passenger identification" CUT "^-\d([\w ]+)/([\w ]+?)(MRS|MSTR|MISS|MS|MR|DR|PR)?$"
+||||||D     "(.*)"       Surname           M 1 1 ACC 1    R W "1707b-3.24.8 passenger surname" ASMATCHED
+||||||D     "(.*)"       Names             M 1 1 ACC 1    R W "1707b-3.24.8 passenger name" ASMATCHED
+||||||D     "(.+)"       Title             O 0 1 ACC 1    R W "1707b-3.24.8 passenger title" ASMATCHED
+    *** Z) generic remarks
+    *** unfortunately, being here within a loop of multiple elements on a same lines, it is not possible to bundle remark texts with their eventual continuation on a next line
+    *** Not forgetting that such bundling can be easily implemented in XSLT
+||||SEG    "^\.R/"     Remark              O 0 1 ACC 1    R W "1707b-3.24 Remarks Element - general remarks element" CUT "^\.R/(\S+) ([A-Z]{2})(\d+) (.+?)(-\d[^/]+/[^/]+)?$"
+|||||D     "(.*)"       @Code              M 1 1 ACC 1    R W "1707b-3.24.2 Remarks Element - SSR, OSI, or AUX code" ASMATCHED
+|||||D     "(.*)"       @StatusCode        M 1 1 ACC 1    R W "1707b-3.24.4 Remarks Element - action/status code" ASMATCHED
+|||||D     "(.*)"       Number             M 1 1 ACC 1    R W "1707b-3.24.4 Remarks Element - action/status number" ASMATCHED
+|||||D     "(.*)"       Text               M 1 1 ACC 1    R W "1707b-3.24.7 Remarks Element - free flow text - UNPARSED" ASMATCHED
+|||||SEG    "^-"        Passenger          O 0 1 ACC 1    R W "1707b-3.24.8 passenger identification" CUT "^-\d([\w ]+)/([\w ]+?)(MRS|MSTR|MISS|MS|MR|DR|PR)?$"
+||||||D     "(.*)"       Surname           M 1 1 ACC 1    R W "1707b-3.24.8 passenger surname" ASMATCHED
+||||||D     "(.*)"       Names             M 1 1 ACC 1    R W "1707b-3.24.8 passenger name" ASMATCHED
+||||||D     "(.+)"       Title             O 0 1 ACC 1    R W "1707b-3.24.8 passenger title" ASMATCHED
+||||SEG     "^\.RN/"   Remark              O 0 99 ACC 99  R W "1707b-3.24.9 Remarks Element - continuation remarks element" CUT "^\.RN/(.+?)(-\d[^/]+/[^/]+)?$"
+    *** we squat the 'ThisVersion' fake CONDition just for the sake of generating a CONTinutation code!
+|||||MARK               @Code              COND ThisVersion ".*" "CONTINUATION" "NULL"
+|||||D     "(.*)"       Text               M 1 1 ACC 1    R W "1707b-3.24.10 Remarks Element - continuation text - UNPARSED" ASMATCHED
+|||||SEG    "^-"        Passenger          O 0 1 ACC 1    R W "1707b-3.24.8 passenger identification" CUT "^-\d([\w ]+)/([\w ]+?)(MRS|MSTR|MISS|MS|MR|DR|PR)?$"
+||||||D     "(.*)"       Surname           M 1 1 ACC 1    R W "1707b-3.24.8 passenger surname" ASMATCHED
+||||||D     "(.*)"       Names             M 1 1 ACC 1    R W "1707b-3.24.8 passenger name" ASMATCHED
+||||||D     "(.+)"       Title             O 0 1 ACC 1    R W "1707b-3.24.8 passenger title" ASMATCHED
+
+ ===== [2.19] Security Information Element =====
+||||SEG    "^\.S/"     Security            O 0 1 ACC 1    R W "1707b-3.28 Security Information Element" CUT "^\.S/(.+?)(-\d[^/]+/[^/]+)?$"
+|||||SEG   ""           NOTAG              M 1 1 ACC 1    R W "1707b-3.28.2-10 Security Information - sub elements" CUT-ON-(/)
+||||||D    "(.*)"       Country            O 0 1 ACC 1    R W "1707b-3.28.2 Security Information - country to which the security applies" ASMATCHED [1..]
+||||||D    "(.*)"       Reference          O 0 1 ACC 1    R W "1707b-3.28.4 Security Information - reference" ASMATCHED [1..]
+||||||D    "(.*)"       StatusCode         O 0 1 ACC 1    R W "1707b-3.28.6 Security Information - status code" ASMATCHED [1..]
+||||||D    "(.*)"       @InfantIndicator   O 0 1 ACC 1    R W "1707b-3.28.8 Security Information - infant indicator" ASMATCHED [1..]
+||||||D    "(.*)"       Text               O 0 1 ACC 9    R W "1707b-3.28.10 Security Information - free text" ASMATCHED [1..]
+|||||SEG   "^-"        Passenger           O 0 1 ACC 1    R W "1707b-3.28.11 passenger identification" CUT "^-\d([\w ]+)/([\w ]+?)(MRS|MSTR|MISS|MS|MR|DR|PR)?$"
+||||||D    "(.*)"       Surname            M 1 1 ACC 1    R W "1707b-3.28.11 passenger surname" ASMATCHED
+||||||D    "(.*)"       Names              M 1 1 ACC 1    R W "1707b-3.28.11 passenger name" ASMATCHED
+||||||D    "(.+)"       Title              O 0 1 ACC 1    R W "1707b-3.28.11 passenger title" ASMATCHED
+
+||||SEG     "^\.SN/"   Security            O 0 99 ACC 99  R W "1707b-3.28.12 Security Information - continuation security element" CUT "^\.SN/(.+?)(-\d[^/]+/[^/]+)?$"
+    *** we squat the 'ThisVersion' fake CONDition just for the sake of generating a CONTinutation code!
+|||||MARK               @Code              COND ThisVersion ".*" "CONTINUATION" "NULL"
+|||||D     "(.*)"       Text               M 1 1 ACC 1    R W "1707b-3.28.13 Security Information - continuation free text" ASMATCHED
+|||||SEG    "^-"        Passenger          O 0 1 ACC 1    R W "1707b-3.28.11 passenger identification" CUT "^-\d([\w ]+)/([\w ]+?)(MRS|MSTR|MISS|MS|MR|DR|PR)?$"
+||||||D     "(.*)"       Surname           M 1 1 ACC 1    R W "1707b-3.28.11 passenger surname" ASMATCHED
+||||||D     "(.*)"       Names             M 1 1 ACC 1    R W "1707b-3.28.11 passenger name" ASMATCHED
+||||||D     "(.+)"       Title             O 0 1 ACC 1    R W "1707b-3.28.11 passenger title" ASMATCHED
+
+
+ ===== [2.20] End Element =====
+|GRP    "^END"          End                M 1 1 ACC 1    R W "PRL-2.20 End Element (group)"  /pscrm
+||D  "END(?:PART)?(.*)"  @PART             C 1 1 ACC 1    COND MsgPart "(END)(?:PART)?(.*)" "1707b-2.21.1 End Element - End of (final) part" ASMATCHED
+||D     "(=)"            SKIP              O 1 1 ACC 1    R W "1707b-2.21.1 End Element - end of text" ASMATCHED
+    *** space characters are tolerated in the 3 'blank' lines, and we accept from 0 to 3 blank lines without raising any warning
+||D     "^(\s*)$"        SKIP              O 0 3 ACC 5    R W "1707b-2.21.4 End Element - 3 blank lines" ASMATCHED
+||D     "(NNNN)"         SKIP              O 1 1 ACC 1    R W "1707b-2.21.5 End Element - end of message" ASMATCHED
+
+     ===== Eating trailing lines =====
+     *** DISABLED!!!  (suppress leading spaces to reactivate)
+    |D     "(.*)"        TrailingLines          O 0 99 ACC 999 R W "PRL-T Trailing Data" ASMATCHED
+
+END
+
+************** ************** ************** ************** ************** **************
+Next to the very END of the DEFinition, everyting is ignored by the Parser.
+So this is the right place for additional documentation.
+************** ************** ************** ************** ************** **************
+
+This is the documentation generated by the Paser, using
+java -cp ".;ReverseXSL.jar" com.reverseXSL.Parse  PRL29.def
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<PRL xmlns="http://www.reverseXSL.com/Foo" PART="1707b-2.4.5 part number">
+   <TypeBHeader xmlns="http://www.reverseXSL.com/Foo/iata" Priority="TypeB-P TypeB Header - Priority Indicator">
+      <SKIP>{0..1} SITA-ZC Optional SITA network legacy message framing, ignored</SKIP>
+      <Recipient>{1..8} TypeB-R TypeB Header - IATA Recipient</Recipient>
+      <CopyTo>
+         <SKIP>{1..1} TypeB-G2dotS Type-B 2nd Recipient block - dummy sender line prefix</SKIP>
+         <SKIP>{0..1} TypeB-G2P Type-B 2nd Recipient block - Priority Indicator, ignored</SKIP>
+         <Recipient>{1..8} TypeB-G2R Type-B 2nd Recipient block - IATA Recipient</Recipient>
+      </CopyTo>
+      <Sender>{1..1} TypeB-S TypeB Header - IATA Sender</Sender>
+      <DoubleSignature>{0..1} TypeB-DS TypeB Header - Double Signature (Billing-to)</DoubleSignature>
+      <Date>
+         <Day>{1..1} TypeB-DD TypeB Header - Date - Day DD</Day>
+         <HH>{1..1} TypeB-HH TypeB Header - Date - Hour HH</HH>
+         <MM>{1..1} TypeB-MM TypeB Header - Date - Minutes MM</MM>
+      </Date>
+      <References>{0..1} TypeB-REF TypeB Header - Sender References - unparsed</References>
+      <RAW>{0..0} PRL-- Garbage lines prefixed to the standard message</RAW>
+   </TypeBHeader>
+   <SKIP>{1..1} 1707b-2.3.1 Standard Message Identifier</SKIP>
+   <Flight>
+      <Carrier>{1..1} 1707b-2.4.1 flight information - flight/carrier</Carrier>
+      <Number>{1..1} 1707b-2.4.1 flight information - flight/number</Number>
+      <Date>
+         <Day>{1..1} 1707b-2.4.1 flight information - date/day</Day>
+         <Month>{1..1} 1707b-2.4.1 flight information - date/month</Month>
+      </Date>
+      <BoardingAirport>{1..1} 1707b-2.4.2 boarding airport code</BoardingAirport>
+      <TransferPoint>{0..1} 1707b-2.4.3 transfer point airport code</TransferPoint>
+   </Flight>
+   <Seat>
+      <Configuration>
+         <Compartment class="1707b-2.12.3 fitted number of seats by compartment - code">
+            <NOTAG>{1..1} 1707b-2.12.3 fitted number of seats by compartment - count</NOTAG>
+         </Compartment>
+      </Configuration>
+      <AircraftType>{0..1} 1707b-2.12.4 aircraft type</AircraftType>
+      <DownlineChange>
+         <atAirport>{1..1} 1707b-2.12.5 downline aircraft or configuration change</atAirport>
+         <Configuration>
+            <Compartment class="1707b-2.12.5 fitted number of seats by compartment - code">
+               <NOTAG>{1..1} 1707b-2.12.5 fitted number of seats by compartment - count</NOTAG>
+            </Compartment>
+         </Configuration>
+         <AircraftType>{0..1} 1707b-2.12.4 aircraft type</AircraftType>
+      </DownlineChange>
+   </Seat>
+   <Booking>
+      <SKIP>{1..1} 1707b-2.10.1 ReservationBookingDesignator identifying code</SKIP>
+      <Compartment class="1707b-2.10.2 compartment code">
+         <Fare>{1..20} 1707b-2.10.2 booking far classes</Fare>
+      </Compartment>
+   </Booking>
+   <Total>
+      <Count>
+         <ByDestination>{1..1} 1707b-2.5.1.2 destination airport code</ByDestination>
+         <Passengers>{1..1} 1707b-2.5.1.3 total number of passengers</Passengers>
+         <InClassOrFare>{1..1} 1707b-2.5.1.4 compartment or faore class</InClassOrFare>
+         <PAD>{0..1} 1707b-2.5.1.7 number of PAD / Passengers Available for Disambarkation</PAD>
+      </Count>
+      <Passenger>
+         <Seats>{1..1} 1707b-2.9.1.1 passenger name and party - seat count</Seats>
+         <Surname>{1..1} 1707b-2.9.1.1 passenger surname</Surname>
+         <Names>{1..1} 1707b-2.9.1.1 passenger name</Names>
+         <Title>{0..1} 1707b-2.9.1.1 passenger title</Title>
+         <GroupedWith>
+            <Id>{1..1} 1707b-2.9.2.2 party/group identifier</Id>
+            <OfTotal>{1..1} 1707b-2.9.2.3 total number of seats in the party/group</OfTotal>
+         </GroupedWith>
+         <AutomatedPNR>
+            <SKIP>{1..1} 1707b-3.18.1 Automated PNR Address Element ID</SKIP>
+            <Address>{1..1} 1707b-3.18.2 PNR Address</Address>
+            <Airline>{0..1} 1707b-3.18.4 airline code</Airline>
+         </AutomatedPNR>
+         <AutomatedPNR>
+            <SKIP>{1..1} 1707b-3.18.1 Automated PNR Address Element ID</SKIP>
+            <Address>{1..1} 1707b-3.18.2 PNR Address</Address>
+            <Airline>{0..1} 1707b-3.18.4 airline code</Airline>
+         </AutomatedPNR>
+         <MarketingInfo>
+            <Flight>
+               <Carrier>{1..1} 1707b-3.19.2a Flight Info - carrier</Carrier>
+               <Number>{1..1} 1707b-3.19.2b Flight Info - number</Number>
+            </Flight>
+            <FareClass>{1..1} 1707b-3.19.2 Marketing Flight Info - fare class</FareClass>
+            <DepartureDay>{1..1} 1707b-3.19.2 Marketing Flight Info - departure date/day</DepartureDay>
+            <Origin>{1..1} 1707b-3.19.2 Marketing Flight Info - origin airport</Origin>
+            <Destination>{1..1} 1707b-3.19.2 Marketing Flight Info - destination airport</Destination>
+            <DepartureTime>{0..1} 1707b-3.19.2 Marketing Flight Info - departure time</DepartureTime>
+            <ReservationStatus>{0..1} 1707b-3.19.2 Marketing Flight Info - reservation status</ReservationStatus>
+         </MarketingInfo>
+         <FirmBooking DiscountType="1707b-3.7/3.14/3.25 Firm DG/ID/RG Passenger Element">
+            <Priority>{1..1} 1707b-3.7.2/3.14.2/3.25.2 Firm DG/ID/RG Passenger Element - priority</Priority>
+            <Seniority>
+               <Day>{1..1} 1707b-3.7.4/3.14.4/3.25.4 Firm DG/ID/RG Passenger Element - seniority date/day</Day>
+               <Month>{1..1} 1707b-3.7.4/3.14.4/3.25.4 Firm DG/ID/RG Passenger Element - seniority date/month</Month>
+               <Year>{1..1} 1707b-3.7.4/3.14.4/3.25.4 Firm DG/ID/RG Passenger Element - seniority date/year</Year>
+            </Seniority>
+         </FirmBooking>
+         <SpaceAvailableBooking DiscountType="1707b-3.8/3.15/3.26 Space DG/ID/RG Passenger Element">
+            <Priority>{1..1} 1707b-3.8.2/3.15.2/3.26.2 Space DG/ID/RG Passenger Element - priority</Priority>
+            <Seniority>
+               <Day>{1..1} 1707b-3.8.4/3.15.4/3.26.4 Space DG/ID/RG Passenger Element - seniority date/day</Day>
+               <Month>{1..1} 1707b-3.8.4/3.15.4/3.26.4 Space DG/ID/RG Passenger Element - seniority date/month</Month>
+               <Year>{1..1} 1707b-3.8.4/3.15.4/3.26.4 Space DG/ID/RG Passenger Element - seniority date/year</Year>
+            </Seniority>
+         </SpaceAvailableBooking>
+         <Baggage indicator="1707b-3.33.2 Pieces/weight data element - weight indicator" unit="WeightCode.matches(^L.*)? POUNDS : NULL">
+            <SKIP>{1..1} 1707b-3.33.1 Pieces/weight data element ID</SKIP>
+            <CheckedPieces>{1..1} 1707b-3.33.4 Pieces/weight data element - number of checked baggage</CheckedPieces>
+            <CheckedWeight>{0..1} 1707b-3.33.6 Pieces/weight data element - checked baggage weight</CheckedWeight>
+            <UncheckedWeight>{0..1} 1707b-3.33.8 Pieces/weight data element - unchecked (hand carried) weight</UncheckedWeight>
+         </Baggage>
+         <BaggagePool>
+            <SKIP>{1..1} 1707b-3.3.1 Baggage pooling element ID</SKIP>
+            <NOTAG>{1..1} 1707b-3.3.2 Baggage pooling element - pooling reference number</NOTAG>
+         </BaggagePool>
+         <BaggageTag>
+            <ID>{1..1} 1707b-3.20.1.2/3.20.2.2 Baggage Tag - ID/number</ID>
+            <ConsecutiveTags>{0..1} 1707b-3.20.1.3/3.20.2.4 Baggage Tag - consecutive numbers</ConsecutiveTags>
+            <FinalDestination>{1..1} 1707b-3.20.1.5/3.20.2.6 Baggage Tag - final destination airport</FinalDestination>
+         </BaggageTag>
+         <InboundConnection>
+            <Flight>
+               <Carrier>{1..1} 1707b-3.13.2a Flight Info - carrier</Carrier>
+               <Number>{1..1} 1707b-3.13.2b Flight Info - number</Number>
+            </Flight>
+            <FareClass>{1..1} 1707b-3.13.2 Inbound Connection Flight Info - fare class</FareClass>
+            <BoardingDay>{1..1} 1707b-3.13.2 Inbound Connection Flight Info - boarding date/day</BoardingDay>
+            <BoardingPoint>{1..1} 1707b-3.13.2 Inbound Connection Flight Info - boarding airport</BoardingPoint>
+            <ArrivalPoint>{0..1} 1707b-3.13.2 Inbound Connection Flight Info - arrival airport</ArrivalPoint>
+            <ArrivalTime>{0..1} 1707b-3.13.2 Inbound Connection Flight Info - arrival time</ArrivalTime>
+            <DateVariation>{0..1} 1707b-3.13.2 Inbound Connection Flight Info - date variation</DateVariation>
+            <ReservationStatus>{0..1} 1707b-3.13.2 Inbound Connection Flight Info - reservation status</ReservationStatus>
+         </InboundConnection>
+         <OutboundConnection>
+            <Flight>
+               <Carrier>{1..1} 1707b-3.21.2a Flight Info - carrier</Carrier>
+               <Number>{1..1} 1707b-3.21.2b Flight Info - number</Number>
+            </Flight>
+            <FareClass>{1..1} 1707b-3.21.2 Outbound Connection Flight Info - fare class</FareClass>
+            <BoardingDay>{1..1} 1707b-3.21.2 Outbound Connection Flight Info - boarding date/day</BoardingDay>
+            <BoardingPoint>{0..1} 1707b-3.21.2 Outbound Connection Flight Info - boarding airport</BoardingPoint>
+            <ArrivalPoint>{1..1} 1707b-3.21.2 Outbound Connection Flight Info - arrival airport</ArrivalPoint>
+            <DepartureTime>{0..1} 1707b-3.21.2 Outbound Connection Flight Info - departure time</DepartureTime>
+            <ReservationStatus>{0..1} 1707b-3.21.2 Outbound Connection Flight Info - reservation status</ReservationStatus>
+         </OutboundConnection>
+         <TravelDocuments ActionCode="1707b-3.40.1.4 API DOCS - action/status code" MultiPassengerIndicator="1707b-3.40.1.26 API DOCS - multi-passenger passport holder indicator">
+            <Type>{0..1} 1707b-3.40.1.6 API DOCS - document type</Type>
+            <IssuingState>{0..1} 1707b-3.40.1.8 API DOCS - issuing country/state</IssuingState>
+            <DocNumber>{0..1} 1707b-3.40.1.10 API DOCS - document number</DocNumber>
+            <Nationality>{0..1} 1707b-3.40.1.12 API DOCS - passenger nationality</Nationality>
+            <BirthDate>{0..1} 1707b-3.40.1.14 API DOCS - date of birth</BirthDate>
+            <Gender>{0..1} 1707b-3.40.1.16 API DOCS - gender code</Gender>
+            <DocExpiry>{0..1} 1707b-3.40.1.18 API DOCS - document expiry date</DocExpiry>
+            <SurnameOnDoc>{0..1} 1707b-3.40.1.20 API DOCS - document surname</SurnameOnDoc>
+            <FirstNameOnDoc>{0..1} 1707b-3.40.1.22 API DOCS - document first given name</FirstNameOnDoc>
+            <SecondNameOnDoc>{0..1} 1707b-3.40.1.24 API DOCS - document second given name</SecondNameOnDoc>
+            <Passenger>
+               <Surname>{1..1} 1707b-3.40.1.27 API DOCS - passenger surname</Surname>
+               <Names>{1..1} 1707b-3.40.1.27 API DOCS - passenger name</Names>
+               <Title>{0..1} 1707b-3.40.1.27 API DOCS - passenger title</Title>
+            </Passenger>
+         </TravelDocuments>
+         <AddressInformation InfantIndicator="1707b-3.40.3.19 API DOCS - infant indicator" StatusCode="1707b-3.40.3.4 API DOCS - action/status code">
+            <NumberOfPassengers>{1..1} 1707b-3.40.3.5 API DOCS - number of passengers to whom the element applies</NumberOfPassengers>
+            <Type>{0..1} 1707b-3.40.3.7 API DOCS - address type</Type>
+            <Country>{0..1} 1707b-3.40.3.9 API DOCS - country</Country>
+            <AddressLine>{0..1} 1707b-3.40.3.11 API DOCS - address details</AddressLine>
+            <City>{0..1} 1707b-3.40.3.13 API DOCS - city</City>
+            <StateOrProvince>{0..1} 1707b-3.40.3.15 API DOCS - state or province</StateOrProvince>
+            <PostalCode>{0..1} 1707b-3.40.3.17 API DOCS - zip/postal code</PostalCode>
+            <Passenger>
+               <Surname>{1..1} 1707b-3.40.3.20 API DOCS - passenger surname</Surname>
+               <Names>{1..1} 1707b-3.40.3.20 API DOCS - passenger name</Names>
+               <Title>{0..1} 1707b-3.40.3.20 API DOCS - passenger title</Title>
+            </Passenger>
+         </AddressInformation>
+         <OtherTravelInformation ActionCode="1707b-3.40.2.4 API DOCS - action/status code" InfantIndicator="1707b-3.40.2.18 API DOCS - infant indicator">
+            <PlaceOfBirth>{0..1} 1707b-3.40.2.6 API DOCS - place of birth</PlaceOfBirth>
+            <TravelDocType>{0..1} 1707b-3.40.2.8 API DOCS - travel document type</TravelDocType>
+            <Visa>
+               <Number>{0..1} 1707b-3.40.2.10 API DOCS - visa document number</Number>
+               <IssuePlace>{0..1} 1707b-3.40.2.12 API DOCS - visa document place of issue</IssuePlace>
+               <IssueDate>{0..1} 1707b-3.40.2.14 API DOCS - visa document issue date</IssueDate>
+               <ForCountry>{0..1} 1707b-3.40.3.16 API DOCS - country for which the visa applies</ForCountry>
+            </Visa>
+            <Passenger>
+               <Surname>{1..1} 1707b-3.40.2.20 API DOCS - passenger surname</Surname>
+               <Names>{1..1} 1707b-3.40.2.20 API DOCS - passenger name</Names>
+               <Title>{0..1} 1707b-3.40.2.20 API DOCS - passenger title</Title>
+            </Passenger>
+         </OtherTravelInformation>
+         <FrequentTraveler>
+            <Information>{1..1} 1707b-3.24.2 Remarks Element - frequent traveler information - UNPARSED</Information>
+            <Passenger>
+               <Surname>{1..1} 1707b-3.24.8 passenger surname</Surname>
+               <Names>{1..1} 1707b-3.24.8 passenger name</Names>
+               <Title>{0..1} 1707b-3.24.8 passenger title</Title>
+            </Passenger>
+         </FrequentTraveler>
+         <Seat StatusCode="1707b-3.24.4 Remarks Element - action/status code">
+            <Number>{1..1} 1707b-3.24.6 Remarks Element - seat data - UNPARSED</Number>
+            <Passenger>
+               <Surname>{1..1} 1707b-3.24.8 passenger surname</Surname>
+               <Names>{1..1} 1707b-3.24.8 passenger name</Names>
+               <Title>{0..1} 1707b-3.24.8 passenger title</Title>
+            </Passenger>
+         </Seat>
+         <Remark Code="1707b-3.24.2 Remarks Element - SSR, OSI, or AUX code" StatusCode="1707b-3.24.4 Remarks Element - action/status code">
+            <Number>{1..1} 1707b-3.24.4 Remarks Element - action/status number</Number>
+            <Text>{1..1} 1707b-3.24.7 Remarks Element - free flow text - UNPARSED</Text>
+            <Passenger>
+               <Surname>{1..1} 1707b-3.24.8 passenger surname</Surname>
+               <Names>{1..1} 1707b-3.24.8 passenger name</Names>
+               <Title>{0..1} 1707b-3.24.8 passenger title</Title>
+            </Passenger>
+         </Remark>
+         <Remark Code="ThisVersion.matches(.*)? CONTINUATION : NULL">
+            <Text>{1..1} 1707b-3.24.10 Remarks Element - continuation text - UNPARSED</Text>
+            <Passenger>
+               <Surname>{1..1} 1707b-3.24.8 passenger surname</Surname>
+               <Names>{1..1} 1707b-3.24.8 passenger name</Names>
+               <Title>{0..1} 1707b-3.24.8 passenger title</Title>
+            </Passenger>
+         </Remark>
+         <Security InfantIndicator="1707b-3.28.8 Security Information - infant indicator">
+            <Country>{0..1} 1707b-3.28.2 Security Information - country to which the security applies</Country>
+            <Reference>{0..1} 1707b-3.28.4 Security Information - reference</Reference>
+            <StatusCode>{0..1} 1707b-3.28.6 Security Information - status code</StatusCode>
+            <Text>{0..1} 1707b-3.28.10 Security Information - free text</Text>
+            <Passenger>
+               <Surname>{1..1} 1707b-3.28.11 passenger surname</Surname>
+               <Names>{1..1} 1707b-3.28.11 passenger name</Names>
+               <Title>{0..1} 1707b-3.28.11 passenger title</Title>
+            </Passenger>
+         </Security>
+         <Security Code="ThisVersion.matches(.*)? CONTINUATION : NULL">
+            <Text>{1..1} 1707b-3.28.13 Security Information - continuation free text</Text>
+            <Passenger>
+               <Surname>{1..1} 1707b-3.28.11 passenger surname</Surname>
+               <Names>{1..1} 1707b-3.28.11 passenger name</Names>
+               <Title>{0..1} 1707b-3.28.11 passenger title</Title>
+            </Passenger>
+         </Security>
+      </Passenger>
+   </Total>
+   <End PART="1707b-2.21.1 End Element - End of (final) part">
+      <SKIP>{1..1} 1707b-2.21.1 End Element - end of text</SKIP>
+      <SKIP>{0..3} 1707b-2.21.4 End Element - 3 blank lines</SKIP>
+      <SKIP>{1..1} 1707b-2.21.5 End Element - end of message</SKIP>
+   </End>
+</PRL>
+

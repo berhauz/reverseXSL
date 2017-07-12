@@ -1,0 +1,214 @@
+<project name="Build Transformer libraries" default="project-jar-pak_01" basedir=".">
+	
+	<description>
+		ANT build file for ReverseXSL Transformer
+	</description>
+	
+	<property file="ant.properties"/>
+	
+	<target name="splash">
+		<echo message="#########################################################" />
+		<echo message="#                                                       #" />
+		<echo message="#      R e v e r s e X S L   T r a n s f o r m e r      #" />
+		<echo message="#                                                       #" />
+		<echo message="#########################################################" />
+	</target>
+	
+	<!-- ================ -->
+	<!-- Check properties -->
+	<!-- ================ -->
+	<target name="check-ant.properties_JRE" unless="ref-JDK">
+		<echo>The ref-JDK property is not set. Check your ant.properties file.</echo>
+		<fail/>
+	</target>
+
+	<target name="check-properties" depends="splash">
+		<antcall target="check-ant.properties_JRE"/>
+		<!-- ... more checks: please insert here ... -->
+	</target>
+	
+	<!-- ====================== -->
+	<!-- Build path definitions -->
+	<!-- ====================== -->
+	<target name="setup-build-path" depends="check-properties">
+		<path id="class-path">
+<!--			<pathelement location="${ref-JDK}/lib/j2ee.jar" />
+			<pathelement location="${build.main.dir}/classes/another.jar" />
+-->		</path>
+	</target>
+	
+		
+	<!-- ================= -->
+	<!--    T A S K S      -->
+	<!-- ================= -->
+	
+	<target name="build-transformer-library" depends="splash, setup-build-path">
+		<echo message="---------------------------------------------------------" />
+		<echo message="COMPILING REVERSE XSL TRANSFORMATION LIBRARIES" />
+		<echo message="---------------------------------------------------------" />
+		<echo message=""/>
+		
+		<mkdir dir="${build.dir.ant}"/>
+
+		<!-- Compile classes -->
+		<!-- historical executable was "D:\java\j2sdk1.4.1_01\bin\javac" -->
+		<javac fork="yes"
+			executable="${ref-JDK}/bin/javac"
+			srcdir="./src"
+			destdir="${build.dir.ant}"
+			debug="on"
+			deprecation="off"
+			optimize="on"
+			target="1.5"
+			source="1.5"
+			 >
+			<include name="com/reverseXSL/util/RegexCheck.java"/>
+			<include name="com/reverseXSL/Licensing.java"/>
+			<include name="com/reverseXSL/Parse.java"/>
+			<include name="com/reverseXSL/Transform.java"/>
+			<exclude name="**/__*.java"/>
+		</javac>
+		<copy todir="${build.dir.ant}">
+			<fileset dir="./src" includes="**/*.properties"/>
+			<fileset dir="./src" includes="**/*.gif,**/*.PNG"/>
+		</copy>
+	</target>
+	
+
+	<!-- javaDoc BUILDs ARE NOT integrated into other tasks --> 	<!--  sourcepath="src" -->
+	
+    <target name="javadoc" description="build javadoc (partially filtered)">
+        <javadoc access="public" author="false" classpath="." destdir="docs/javadoc" nodeprecated="true" nodeprecatedlist="true" 
+        	noindex="false" nonavbar="false" notree="false" 
+        	overview="C:\0-Works\8e-ReverseXSL\workspace\Transformer\src\overview.html" 
+        	packagenames="com.reverseXSL.types,com.reverseXSL,com.reverseXSL.exception,com.reverseXSL.message,com.reverseXSL.parser,com.reverseXSL.util,com.reverseXSL.transform" 
+        	source="1.4"  splitindex="false" 
+        	stylesheetfile="C:\0-Works\8e-ReverseXSL\workspace\Transformer\src\stylesheet.css" use="true" version="true">
+    		<fileset dir="src" 
+    			includes="**/*.java"
+    			excludes="**/MappingSelection*,**/SD.*,**/types/Address*,**/TypeException*,**/ParserException*,**/TransformerException*,**/TransformerMessage*,**/LicenseManager*,**/SEGDefinition*,**/__*.java,**/*.html,**/*.properties">
+    		</fileset>        	
+        </javadoc>        
+    </target>
+
+	<target name="SUB-build-transformation-jar"  depends="">
+		<echo message=" Message DEF and XSL Resources from : ${source-of-resources}"/>
+		<echo message=" Target JAR : ${jar-dir}.jar"/>
+		<echo message=""/>
+
+		<jar destfile="${build.dir}/${jar-dir}.jar" compress="false" >
+			<fileset dir="${build.dir.ant}" />	
+			<fileset dir="${build.dir}/${jar-dir}" />
+			<manifest>
+				<attribute name="Implementation-Title" value="ReverseXSL Transformation Libraries"/>
+				<attribute name="Implementation-Version" value="2.0"/>
+				<attribute name="Built-By" value="BH"/>
+				<!--attribute name="Class-Path" value="champbroker.jar"/-->
+				<attribute name="Main-Class" value="com.reverseXSL.Transform"/>
+			</manifest>
+		</jar>
+	</target>
+	
+	
+	<target name="SUB-build-distribution-zip-Windows"  depends="">
+		<echo message=" Demo files from : ${source-of-resources}/demo"/>
+		<echo message=" Target ZIP : ${jar-dir}.zip"/>
+		<echo message=""/>
+
+		<zip destfile="${build.dir}/${jar-dir}.zip"  >
+			<fileset dir="${build.dir}" includes="${jar-dir}.jar" />	
+			<fileset dir="${build.dir}/${zip-dir}" />
+			<fileset dir="${source-of-resources}/demo" includes="Sample*.txt,*.bat,*.rtf"/>
+		</zip>
+	</target>
+	
+	<target name="SUB-build-distribution-Gzip-UNIX"  depends="">
+		<echo message=" Demo files from : ${source-of-resources}/demo"/>
+		<echo message=" Target GZ tar: ${jar-dir}.tar.gz"/>
+		<echo message=""/>
+
+		<tar destfile="${build.dir}/${jar-dir}.tar" >
+			<fileset dir="${build.dir}" includes="${jar-dir}.jar" />	
+			<fileset dir="${build.dir}/${zip-dir}" />
+			<fileset dir="${source-of-resources}/demo" includes="*.txt,*.sh"/>
+		</tar>
+		<gzip destfile="${build.dir}/${jar-dir}.tar.gz" src="${build.dir}/${jar-dir}.tar" />
+	</target>
+	
+	<!-- =================================== -->
+	<!-- Clean local content (tmp and build) -->
+	<!-- =================================== -->
+	
+	<target name="clean" description="Remove the build directory" depends="splash">
+		<delete dir="${build.dir.ant}" includeemptydirs="true" failonerror="true" verbose="true">
+		</delete>
+		<echo message=""/>
+		<echo message="---------------------------------------------------------" />
+		<echo message="BUILD DIRECTORY '${build.dir.ant}' REMOVED !" />
+		<echo message="---------------------------------------------------------" />
+	</target>
+	
+	<!-- YOU NEED ONLY COPY AND CUSTOMISE A TASK LIKE THE ONE BELOW FOR ANY ADDITIONAL PROJECT -->
+
+	<!-- ======================== -->
+	<!-- PROJECT RELEASE ONE      -->
+	<!-- ======================== -->
+	
+	<target name="project-jar-pak_01" description="Build the message transformation JAR for the first official release of the jar" depends="build-transformer-library">
+		<echo message="---------------------------------------------------------" />
+		<echo message="        PACKAGING A MESSAGE TRANSFORMATION ARCHIVE" />
+		<echo message="            --- PROJECT : DEFAULT RELEASE ---" />
+		<echo message="---------------------------------------------------------" />
+		<echo message=""/>
+		
+		<property name="jar-dir" value="ReverseXSL"/>
+		<property name="zip-dir" value="zip"/>
+		<!-- define other source directories below for variant message libraries  to include -->
+		<property name="source-of-resources" value="pack01"/>
+
+		<!-- always start afresh -->
+		<delete includeemptydirs="true" failonerror="false">
+			<!-- SAFEguard against ghost files-->
+			<fileset dir="${build.dir}/${jar-dir}" />
+			<fileset dir="${build.dir}/${zip-dir}" />
+			<fileset file="${build.dir}/${jar-dir}.zip" />
+			<fileset file="${build.dir}/${jar-dir}.jar" />
+		</delete>
+
+		<!-- copy documentation -->
+		<copy todir="${build.dir}/${zip-dir}">
+			<fileset dir="./docs" includes="RX*.pdf, *.xml, *.xsd"/>
+		</copy>
+		<copy todir="${build.dir}/${zip-dir}/javadoc">
+			<fileset dir="./docs/javadoc" excludes="**/.svn/*"/>
+		</copy>		
+		
+		<!-- copy samples, resources & reference -->
+		<copy todir="${build.dir}/${jar-dir}">
+			<fileset dir="${source-of-resources}" excludes="**/__*,*,**/*.db,**/.svn/*,**/demo/*"/>
+		</copy>
+
+		<!-- copy selective source code -->
+		<copy todir="${build.dir}/${jar-dir}">
+			<fileset dir="./src" includes="**/Transform.java,**/Parse.java"/>
+		</copy>
+		<antcall target="SUB-build-transformation-jar"/>
+		<antcall target="SUB-build-distribution-zip-Windows"/>
+		<antcall target="SUB-build-distribution-Gzip-UNIX"/>
+	</target>
+	
+	
+	<!-- ======================================================== -->
+	<!-- =========   GLOBAL TASK                      =========== -->
+	<!-- ======================================================== -->
+	
+	<target name="scratch-pad-TESTING" description="try ant commands" depends="check-properties">
+		<property name="jar-dir" value="ReverseXSL"/>
+		<tar destfile="${build.dir}/${jar-dir}.tar" >
+			<fileset dir="${build.dir}" includes="${jar-dir}.jar" />	
+		</tar>
+		<gzip destfile="${build.dir}/${jar-dir}.tar.gz" src="${build.dir}/${jar-dir}.tar" />
+	</target>
+
+
+</project>

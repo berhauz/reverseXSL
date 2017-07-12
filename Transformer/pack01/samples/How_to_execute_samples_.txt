@@ -1,0 +1,49 @@
+
+1. extract the contents of /samples sub-directories to a directory of your choice
+	that also contains the reverseXSL.jar (the sub-directory levels disappear)
+   You shall get:
+	TypeB_FWB_01.txt
+	MT101_01.txt
+	VATdeclaration.csv
+	  VATdeclare.xls
+	  MakeDeclaration.bat
+	reverseXSL.jar 
+
+   all in the same directory. The .xls and .bat are not sample messages in proper; they 
+   illustrate a simple use within an Excel Macro.
+
+2. get a command shell (e.g. on MS-Windows Start>Run...Open: "cmd" >OK)
+
+   Please ensure that the default directory of the command shell corresponds to the one
+   inside which you extracted the files and also have the original reverseXSL.jar.
+
+   then type:
+
+	java -version
+
+   which shall return your default java virtual machine (JVM) version:
+   Check that that you have installed a JVM of version 1.4 or later and that
+   it is available on the command PATH
+   
+3. run the transformations
+
+	java -jar reverseXSL.jar TypeB_FWB_01.txt
+
+	java -jar reverseXSL.jar MT101_01.txt
+
+	java -jar reverseXSL.jar VATdeclaration.csv
+
+4. additional tips:
+
+	to capture the generated XML document, type for instance:
+		java -jar reverseXSL.jar TypeB_FWB_01.txt >myOutput.xml
+
+	You can execute the VAT declaration sample by opening the Excel workbook and clicking
+	on the export button. The button triggers a VBA Macro that invokes MakeDeclaration.bat.
+	But without a license, the XSL template (MapToInterVAT.xsl) in resources/XSL will not be
+	executed on the fly and the final result will not comply with the target 
+	schema reference/DeclarationTVA-1.5.xsd; yet, you will get the XML document generated 
+	by the Parsing step alone with a reminder in traces that the free version 
+	ignores XSL Transformation steps.
+
+-- END --

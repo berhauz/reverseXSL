@@ -1,0 +1,165 @@
+<html>
+<head>
+	<meta name="reverseXSL overview" content="Overview of the reverseXSL software"/>
+	<title>Overview of the reverseXSL software package</title>
+</head>
+<body>
+<h1>Overview</h1>
+<p>The com.reverseXSL package provides any-to-any message transformation capabilities for text-based data, using 
+XML as pivotal format.</p>
+<h2>Principles</h2>
+<p>
+This package contains an original text-based-document parser that transforms character-based data to data element trees rendered here as XML. It complements the
+	XML-to-anything transformation capabilities of XSLT with anything-to-XML transformation functions. XSLT is an component of the java API for XML
+processing (JAXP - javax.xml.transform) which is included in all recent Java language runtime libraries and not in this software. The software requires a Java runtime environment (JRE) version 1.4.2 or later, and relies
+on JAXP for proper operation.</p>
+<p>The Parser can handle flat files containing plain text as well as control characters, with mixed fields of variable and fixed size formats, composite structures nested in each other, repeating groups of elements at any level, 
+	explicit and implicit field separators, optional structures, validity conditions, plus simple and complex interdependencies (element-to-element, element-to-value, value-to-element, value-to-value). The parser operates 
+	internally on UNICODE characters, and accepts all input/output encodings in the java Charsets (iso-8859-x, UTF-8, UTF-16 BE/LE/BOM, JIS, EBCDIC, ASCII, legacy code pages, etc.).	
+	</p>
+<p>The Parser component alone excels at converting complex text-based structures to XML; it can change nesting 
+	levels (flatten or enrich), as well as hide data values or supply additional information based on the evaluation of conditions, 
+	but it cannot re-order data elements, neither combine values from
+	different places in the source message. These last functions are actually delegated to an optional XSLT transformation step next to the Parsing in proper.
+	</p>
+<p>By analogy to XSLT which is built over XPath expressions, the reverseXSL Parser is based on regular 
+	expressions (package java.util.regex) which it uses in turn and recursively 
+	to identify (i), cut (c), extract (e), and validate (v) information. By analogy to XSLT which interprets XSL templates to transform tree-structures (XML) to any
+	character-based document, the reverseXSL parser interprets DEF files (message DEFinitions) to transform character-based documents into tree structures (rendered as XML).
+	</p>
+	
+<p>The tool bundles three main data processing steps: 
+<ol>
+  <li>A simple facility, based on pattern recognition, capable of matching a transformation profile to an arbitrary input message.
+  A transformation profile contains zero, one, or both of the next two steps, with additional optional message handling parameters.
+  </li>
+  <li>A Parsing step, dedicated to decode any structured character-data message and produce an XML document.
+  </li>
+  <li>An XSL Transformation step, dedicated to convert XML documents into
+  other XML documents, else flat file structures.</li>
+	</ol>
+
+	<p>In a typical application context, or enterprise gateway, the same processing chain applies to both 
+	flow directions, for instance from EDI to XML and from XML to EDI, by just a proper setting of meta-data, and notably the combining 
+	of Parsing and XSL transformation stages.
+</p>
+	<p>
+	The software is entirely driven by meta-data. No code is generated. The transformation-profile matching step makes use of a mapping-selection-table. 
+	The Parsing step makes use of message DEFinition files, and the XSL Transformation step is driven by 
+	XSL templates. All meta-data is loaded from plain text file representations to be found within regular directories and/or on the classpath (through
+	the java classloader). The mechanisms are identical to those used for java .class files.
+</p>
+	<p>
+The package takes the form of a java archive (.jar) file that contains the software
+as well as all meta-data resources required to handle a given set of message formats. 
+New or extended message sets can be supplied as releases of the main jar file, or as additional and separate jar files. External ad-hoc meta data files are also often used in testing.
+</p>
+<p>
+The package contains two main classes: <b>TransformerFactory</b> and <b>Transformer</b>, similar to the javax.xml.transform package. 
+	The Transformer factory encapsulates all details regarding the source of meta-data 
+	(precisely, whether to use embedded data, data from an external jar, or from specific files), as well as message 
+	transformation parameters linked to an operational context (thresholds, charsets, message de-pollution). 
+	The TransformerFactory is then used to instantiate one or a few 
+	Tranformers that will actually do the job. 
+	Transformers can be spawned in different threads. 
+	They will then all share the same meta-data source defined at factory 
+	time. When instantiated from the same factory, Transformers can still 
+	be differentiated by their base counter for generating message identifiers 
+	(an automatic XML root-element attribute).
+	</p>
+
+<h2>The use of the package is extremely simple</h2>
+<p>It is best illustrated through the following sample code. It takes only 3 effective lines of code!</p>
+<blockquote><pre>
+<code>
+<b>try {</b>
+	//<i style="color: green">you must catch exceptions, as any failure to transform the input message</i>
+	// <i style="color: green">results in an exception. No exception means OK.</i>
+	
+	//<b>1.</b> <i style="color: green">Get a default transformer factory with:</i>
+	<b>TransformerFactory tf = TransformerFactory.<i>newInstance()</i>;</b>
+		//<i style="color: green">That one will use all meta-data resources embedded in the main jar file.</i>
+		//<i style="color: green">Alternative factory methods support variant meta-data sources</i>
+	
+	//<b>2.</b> <i style="color: green">Instantiate a transformer:</i>
+	<b>Transformer t = tf.newTransformer();</b>
+	
+		//<i style="color: green">Use an Input Stream and an Output Stream of whatever type: </i>
+		//<i style="color: green"> Byte Array, File or else</i>
+		ByteArrayInputStream bais = new ByteArrayInputStream(myInputMessage);
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		
+	//<b>3.</b> <i style="color: green">Execute the transformation</i>
+	<b>int parserWarnings = t.transform(is, os);</b>
+		//<i style="color: green">DONE! just take the transformed message from the output stream.</i>
+		
+		//<i style="color: green">The parser, if invoked in the transformation, is able to tolerate</i>
+		//<i style="color: green">minor message syntax deviations (this is entirely parametrizable)</i>
+		//<i style="color: green">up to given thresholds (set via the factory API). The integer that</i>
+		//<i style="color: green">is returned tells how many syntax violations were actually detected</i>
+		//<i style="color: green">with a count still below thresholds: by default, 10 warnings are </i>
+		//<i style="color: green">accepted, and zero major error.</i>
+		
+		//<i style="color: green">You may be interested in:</i>
+		StringBuffer sb = <b>t.getLog()</b>;
+		ListIterator li = <b>t.getParserExceptionListIterator()</b>;
+
+<b>} catch (Exception e) {</b>
+	//<i style="color: green">put your exception handling code here.</i>
+<b>}</b> 
+</code>
+    </pre></blockquote>
+<p>The sketch below outlines the internal architecture of the tool, and how its components are used for 
+	INbound and OUTbound message handling. We assume here an OUTside world talking in some legacy text-based format, 
+	and an INside world in XML. It can well be the opposite: the adaptation of an internal legacy application that features 
+	data import/export in
+proprietary text-based layouts, to an external XML world.</p>
+<img src="main-sketch.png" alt="" border="0"/>
+
+<h2>Meta-Data Reference Information</h2>
+<p>Meta-data can be divided in three categories:</p>
+
+<ul>
+  <li>The <u>Mapping Selection Table</u>: telling which combination of Parser and XSL transformation steps to use on which message. This meta-data is 
+	  held in a file whose default names is simply "<b>mapping_selection_table.txt</b>". 
+	  It contains an ordered collection of identification patterns. For each pattern
+	  can be associated  
+	  a parser DEF name and an XSL Template name. None, one or both can be specified.
+	  The mapping selection syntax is documented within the meta-data file itself.
+  </li>
+
+  <li><u>Parser DEFinition files</u>: Text-based message formats of any kind can be transformed to XML with the help of the Parser. 
+	  The parser makes use of formal message syntax definitions held is so called <b>DEF files</b>.
+	  The DEF file syntax is documented in a specific manual (PDF) included in the jar under /resources.
+  </li>
+
+  <li><u>XSL Templates</u>: mappings from XML to other XML formats, and from XML to text-based message formats 
+	  are implemented with <b>XSL Templates</b> and the <code>javax.xml.transform</code> package.
+	  XSL Transformations (XSLT) is a W3C specification documented elsewhere in numerous web sites and books.
+  </li>
+
+</ul>
+<p>Such meta data is found under sub-dir <i>resources</i> within the jar archive file itself:</p>
+<blockquote>
+    <pre>
+<code>
+[jar file.jar]--+-META-INF/---MANIFEST.MF
+                |
+                +-resources/--+--XSLT/--*XSL Templates for XML-to-XML and XML-to-EDIorTEXT (meta-data)
+                |             |
+                |             +--DEF/---*Parser DEF files for EDIorTEXT-to-XML (meta-data)
+                |             |
+                |             +-TABLES/--Mapping Selection Table (meta-data)
+                |
+                +-com/reverseXSL/... : reverseXSL java classes, including the Transformer
+                |
+                +-reference/... : reference message schemas and samples (to extract from the jar)
+                |                 
+                +-samples/---Example input messages (to extract from the jar)
+</code>
+    </pre></blockquote>
+	<p>The jar file also contains reference data: XML Schemas and sample files. This reference directory
+	and everything below is only informative. They are not needed for correct software operation
+	but conveniently shipped with the software itself.</p>
+</body>
+</html>

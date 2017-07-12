@@ -1,0 +1,34 @@
+VAT Quaterly Declaration Form,,,REF,1506091829,,,,,
+,,,,,,,,,
+VAT No,,BE0999.888.777,,Select Quarter,,,,,
+Name,,Chuck Netmagic,,Q2,,,,,
+Address,,"1, Exemmel street",,and,,,,,
+ZIP&city,,2616 Webcity,,,,,,,
+,,,,,,,,,
+YEAR,,2009 ,,Q1,Q2,Q3,Q4,,Q2
+II. OUTPUT OPERATIONS (sent Invoices),,,CODE,,,,,,
+B,Operations for which VAT is due,,,,,,,,
+,,- at the rate of 6%,01,0.00,0.00,0.00,0.00,,0.00
+,,- at the rate of 12%,02,0.00,"1,045.76",0.00,0.00,,1045.76
+,,- at the rate of 21%,03,"1,725.00","10,234.78",0.00,0.00,,10234.78
+E,Operations exempt fromVAT and with clients outside BE (rate 0%),,47,"15,706.86","3,407.00",0.00,0.00,,3407.00
+,,,,,,,,,
+III. INPUT OPERATIONS (received Invoices),,,,,,,,,
+A,Amounts inclusive of received credit notes,,,,,,,,
+,,- for diverse goods and services,82,"4,384.36","5,230.67",0.00,0.00,,5230.67
+,,- for capital goods (investing),83,0.00,357.00,0.00,0.00,,357.00
+D,Other operations for which VAT is due by the declarer (foreign supplies),,87,"2,688.87",858.93,0.00,0.00,,858.93
+,,,,,,,,,
+IV. TAXES DUE,,,,,,,,,
+A,VAT bound to operations declared under,,,,,,,,
+,,- codes 01 02 03 (sent invoices),54,362.25,"2,274.80",0.00,0.00,,2274.80
+,,- code 87 (foreign suppliers...),56,354.66,180.38,0.00,0.00,,180.38
+Total,,,XX,716.91,"2,455.18",0.00,0.00,,2455.18
+,,,,,,,,,
+V. TAXES DEDUCTIBLE,,,,,,,,,
+A,Deductible VAT (bound to codes 82 & 83),,59,763.66,916.11,0.00,0.00,,916.11
+Total,,,YY,763.66,916.11,0.00,0.00,,916.11
+,,,,,,,,,
+VI. BALANCE,,,,,,,,,
+Taxes due -to- VAT Authorities (XX-YY),,,71, - ,"1,539.07", - , - ,,1539.07
+Taxes due -by- VAT Authorities (YY-XX),,,72,46.75, - , - , - ,, - 
